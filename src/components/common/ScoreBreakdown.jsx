@@ -5,34 +5,28 @@ import { Tooltip } from '@mui/material';
 const ScoreBreakdown = ({ semantic = 90, audience = 90, budget = 90, engagement = 90, graph = 90, final = 92 }) => {
   const parameters = [
     {
-      label: 'Semantic Relevance',
+      label: 'Content & Topic Match',
       value: semantic,
       color: '#A855F7', // Purple
-      tooltip: 'Measures structural content overlap between campaign requirements and creator bios using Sentence-BERT embeddings.'
+      tooltip: 'Measures how closely the creator\'s topics and content match your campaign requirements.'
     },
     {
-      label: 'Audience Overlap',
+      label: 'Target Audience Match',
       value: audience,
       color: '#3B82F6', // Blue
-      tooltip: 'Calculates the age, gender, and language demographic overlap between the target audience and creator channels.'
+      tooltip: 'Calculates how well the creator\'s viewers match your target customer age, gender, and location.'
     },
     {
-      label: 'Budget Compatibility',
+      label: 'Budget Fit',
       value: budget,
       color: '#10B981', // Green
-      tooltip: 'Measures alignment between the campaign sponsorship budget and creator estimated rate cards.'
+      tooltip: 'Shows if the creator\'s rates fit comfortably within your campaign budget.'
     },
     {
-      label: 'Engagement Fit',
+      label: 'Viewer Connection',
       value: engagement,
       color: '#F59E0B', // Orange
-      tooltip: 'Based on historical viewership retention, video interaction rate, and user comments feedback patterns.'
-    },
-    {
-      label: 'Graph Centrality',
-      value: graph,
-      color: '#06B6D4', // Cyan
-      tooltip: 'Measures the creator\'s influence inside the social network graph using PageRank and betweenness centrality.'
+      tooltip: 'Based on how actively the viewers comment, like, and watch the creator\'s videos.'
     }
   ];
 
@@ -67,7 +61,7 @@ const ScoreBreakdown = ({ semantic = 90, audience = 90, budget = 90, engagement 
             margin: 0,
           }}
         >
-          ✨ Explainable AI Suitability Breakdown
+          ✨ AI Matching Breakdown
         </h3>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Overall Score:</span>

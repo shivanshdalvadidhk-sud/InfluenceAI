@@ -12,9 +12,7 @@ import {
   Bookmark,
   BookmarkCheck,
   Mail,
-  Network,
   TrendingUp,
-  Award,
   Video,
   ChevronRight
 } from 'lucide-react';
@@ -159,25 +157,6 @@ const InfluencerDetail = () => {
             {isSaved ? <BookmarkCheck size={20} /> : <Bookmark size={20} />}
           </button>
           
-          <button
-            onClick={() => navigate(`/company/influencers/${influencer.id}/graph`)}
-            style={{
-              padding: '12px 18px',
-              borderRadius: '10px',
-              border: '1px solid var(--primary-purple)',
-              backgroundColor: 'var(--primary-light)',
-              color: 'var(--primary-purple)',
-              fontWeight: 600,
-              fontSize: '0.85rem',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-            }}
-          >
-            <Network size={16} />
-            <span>Network Influence Graph</span>
-          </button>
 
           <button
             onClick={handleSendOffer}
@@ -198,13 +177,11 @@ const InfluencerDetail = () => {
         </div>
       </div>
 
-      {/* Metrics Row */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '20px' }}>
         {[
           { label: 'Followers / Subscribers', val: influencer.subscribersStr, desc: 'Total community size', icon: <User size={18} /> },
           { label: 'Average Video Views', val: influencer.avgViewsStr, desc: 'Average reach per post', icon: <Video size={18} /> },
-          { label: 'Engagement Rate', val: `${influencer.engagementRate}%`, desc: 'Comment/like engagement', icon: <TrendingUp size={18} /> },
-          { label: 'Graph Influence Index', val: `${influencer.graphScore}/100`, desc: 'Based on PageRank centrality', icon: <Award size={18} /> }
+          { label: 'Engagement Rate', val: `${influencer.engagementRate}%`, desc: 'Comment/like engagement', icon: <TrendingUp size={18} /> }
         ].map((m, idx) => (
           <div
             key={idx}
@@ -268,24 +245,6 @@ const InfluencerDetail = () => {
                 <span style={{ fontSize: '0.75rem', color: 'var(--text-light)', fontWeight: 600, display: 'block', marginBottom: '8px' }}>NICHE LABELS</span>
                 <span style={{ backgroundColor: 'var(--primary-light)', color: 'var(--primary-purple)', padding: '6px 12px', borderRadius: '16px', fontSize: '0.78rem', fontWeight: 600 }}>{influencer.category}</span>
               </div>
-
-              <div>
-                <span style={{ fontSize: '0.75rem', color: 'var(--text-light)', fontWeight: 600, display: 'block', marginBottom: '6px' }}>SUPPORTED LANGUAGES</span>
-                <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>{influencer.language}</span>
-              </div>
-
-              {influencer.collaborators && influencer.collaborators.length > 0 && (
-                <div>
-                  <span style={{ fontSize: '0.75rem', color: 'var(--text-light)', fontWeight: 600, display: 'block', marginBottom: '8px' }}>COLLABORATORS IN GRAPH</span>
-                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                    {influencer.collaborators.map((c, idx) => (
-                      <span key={idx} style={{ backgroundColor: '#F1F5F9', color: 'var(--text-primary)', padding: '4px 10px', borderRadius: '8px', fontSize: '0.75rem', fontWeight: 500 }}>
-                        {c}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              )}
             </div>
 
             {/* Why Recommend */}
@@ -295,22 +254,15 @@ const InfluencerDetail = () => {
                 <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
                   <CheckCircle2 size={16} color="var(--accent-green)" style={{ marginTop: '2px', flexShrink: 0 }} />
                   <div>
-                    <strong style={{ display: 'block' }}>Semantic Relevance Match</strong>
-                    <span style={{ color: 'var(--text-secondary)' }}>Sentence-BERT indicates high thematic similarity with your campaign keywords.</span>
+                    <strong style={{ display: 'block' }}>Content Relevance Match</strong>
+                    <span style={{ color: 'var(--text-secondary)' }}>The creator's topics and posts are a strong match for your campaign goals.</span>
                   </div>
                 </div>
                 <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
                   <CheckCircle2 size={16} color="var(--accent-green)" style={{ marginTop: '2px', flexShrink: 0 }} />
                   <div>
-                    <strong style={{ display: 'block' }}>Graph Node Centrality</strong>
-                    <span style={{ color: 'var(--text-secondary)' }}>PageRank score positions this creator as a powerful hub for organic distribution.</span>
-                  </div>
-                </div>
-                <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
-                  <CheckCircle2 size={16} color="var(--accent-green)" style={{ marginTop: '2px', flexShrink: 0 }} />
-                  <div>
-                    <strong style={{ display: 'block' }}>Budget Suitability</strong>
-                    <span style={{ color: 'var(--text-secondary)' }}>Estimated rates are within limits, ensuring high cost-to-reach efficiency.</span>
+                    <strong style={{ display: 'block' }}>Budget Fit</strong>
+                    <span style={{ color: 'var(--text-secondary)' }}>The creator's rates fit comfortably within your campaign budget limits.</span>
                   </div>
                 </div>
               </div>

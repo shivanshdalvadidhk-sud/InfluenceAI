@@ -2,8 +2,8 @@ import React, { useState, useEffect } from 'react';
 import PageHeader from '../../components/layout/PageHeader';
 import { authService } from '../../services/authService';
 import { showToast } from '../../components/common/Toast';
-import { INDIAN_STATES, INDIAN_LANGUAGES } from '../../data/mockData';
-import { User, Video, Radio, DollarSign, Save, Globe } from 'lucide-react';
+import { INDIAN_STATES } from '../../data/mockData';
+import { User, Video, Radio, DollarSign, Save } from 'lucide-react';
 
 const InfluencerProfile = () => {
   const [currentUser, setCurrentUser] = useState(null);
@@ -13,9 +13,6 @@ const InfluencerProfile = () => {
   const [creatorName, setCreatorName] = useState('');
   const [bio, setBio] = useState('');
   const [state, setState] = useState('Karnataka');
-  
-  // Selected languages checklist state
-  const [selectedLanguages, setSelectedLanguages] = useState(['English']);
 
   // YouTube stats
   const [handle, setHandle] = useState('');
@@ -46,15 +43,6 @@ const InfluencerProfile = () => {
       setCreatorName(user.creatorName || '');
       setBio(user.bio || '');
       setState(user.state || 'Karnataka');
-      
-      // Load selected languages (check if array or fallback string)
-      if (Array.isArray(user.languages)) {
-        setSelectedLanguages(user.languages);
-      } else if (user.language) {
-        setSelectedLanguages([user.language]);
-      } else {
-        setSelectedLanguages(['English']);
-      }
 
       setHandle(user.handle || '');
       setSubscribers(user.subscribers || 0);
@@ -79,22 +67,9 @@ const InfluencerProfile = () => {
     }
   };
 
-  const handleLanguageToggle = (lang) => {
-    if (selectedLanguages.includes(lang)) {
-      setSelectedLanguages(selectedLanguages.filter(l => l !== lang));
-    } else {
-      setSelectedLanguages([...selectedLanguages, lang]);
-    }
-  };
-
   const handleSave = (e) => {
     e.preventDefault();
     if (!currentUser) return;
-
-    if (selectedLanguages.length === 0) {
-      showToast('Please select at least one language.', 'error');
-      return;
-    }
 
     const updated = {
       ...currentUser,
@@ -103,8 +78,8 @@ const InfluencerProfile = () => {
       bio,
       city: '', // city headquarters removed
       state,
-      languages: selectedLanguages,
-      language: selectedLanguages.join(', '), // fallback compatibility
+      languages: currentUser.languages || ['English'],
+      language: currentUser.language || 'English',
       primaryPlatform: 'YouTube',
       handle,
       subscribers,
@@ -174,31 +149,6 @@ const InfluencerProfile = () => {
           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
             <label style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Creator Biography (Short Bio) *</label>
             <textarea rows={3} value={bio} onChange={(e) => setBio(e.target.value)} required style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid var(--border-color)', fontSize: '0.85rem', fontFamily: 'var(--font-body)', resize: 'vertical' }} />
-          </div>
-        </div>
-
-        {/* Indian Languages selection */}
-        <div style={{ backgroundColor: 'white', borderRadius: 'var(--border-radius-lg)', border: '1px solid var(--border-color)', padding: '28px', boxShadow: 'var(--shadow-sm)', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', borderBottom: '1px solid var(--border-light)', paddingBottom: '12px' }}>
-            <Globe size={16} style={{ color: 'var(--primary-purple)' }} />
-            <h3 style={{ fontSize: '0.85rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--text-secondary)' }}>Content Languages (Select All that Apply) *</h3>
-          </div>
-          
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: '12px', maxHeight: '200px', overflowY: 'auto', border: '1px solid var(--border-color)', padding: '16px', borderRadius: '8px', backgroundColor: '#F8FAFC' }}>
-            {INDIAN_LANGUAGES.map((lang) => {
-              const isChecked = selectedLanguages.includes(lang);
-              return (
-                <label key={lang} style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.82rem', color: 'var(--text-primary)', cursor: 'pointer' }}>
-                  <input
-                    type="checkbox"
-                    checked={isChecked}
-                    onChange={() => handleLanguageToggle(lang)}
-                    style={{ cursor: 'pointer', width: '15px', height: '15px' }}
-                  />
-                  <span>{lang}</span>
-                </label>
-              );
-            })}
           </div>
         </div>
 

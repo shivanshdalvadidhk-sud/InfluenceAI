@@ -49,6 +49,56 @@ export const authService = {
     return user;
   },
 
+  loginWithGoogle: async (role) => {
+    // Simulating API latency
+    await new Promise((resolve) => setTimeout(resolve, 800));
+
+    let user = null;
+    if (role === 'Company') {
+      user = {
+        email: 'brand.google@influenceai.com',
+        role: 'Company',
+        name: 'Google Brand Account',
+        brandName: 'Google Brand',
+        industry: 'Technology',
+        avatar: 'https://images.unsplash.com/photo-1577219491135-ce391730fb2c?w=100',
+        city: 'Bengaluru',
+        state: 'Karnataka',
+        country: 'India',
+        website: 'https://google.com',
+        description: 'Mock brand account registered via Google OAuth.',
+        socials: { instagram: '@google', youtube: '@google', linkedin: 'Google Inc.', x: '@google' },
+        established: '2026',
+        authProvider: 'google'
+      };
+    } else {
+      user = {
+        email: 'creator.google@influenceai.com',
+        role: 'Influencer',
+        name: 'Google Creator Account',
+        creatorName: 'Google Creator',
+        handle: '@googlecreator',
+        primaryPlatform: 'YouTube',
+        category: 'Technology',
+        avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100',
+        city: 'Bengaluru',
+        state: 'Karnataka',
+        country: 'India',
+        language: 'English',
+        bio: 'Mock influencer/creator account registered via Google OAuth.',
+        subscribers: 250000,
+        avgViews: 50000,
+        engagementRate: 5.2,
+        priceRates: { starting: 15000, dedicated: 50000, integrated: 30000, short: 10000 },
+        authProvider: 'google'
+      };
+    }
+
+    localStorage.setItem('influenceai_user', JSON.stringify(user));
+    localStorage.setItem('influenceai_role', role);
+    return user;
+  },
+
   registerCompany: async (data) => {
     await new Promise((resolve) => setTimeout(resolve, 800));
     const user = {

@@ -11,8 +11,6 @@ import {
   Bookmark,
   Layers,
   ArrowRight,
-  TrendingUp,
-  Target,
   FileSpreadsheet
 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
@@ -87,7 +85,6 @@ const CompanyDashboard = () => {
         <StatCard label="Active Campaigns" value="4" trend="+25.0%" icon={<Layers size={20} />} />
         <StatCard label="Recommended Influencers" value="128" trend="+12.4%" icon={<Sparkles size={20} />} />
         <StatCard label="Saved Influencers" value={savedCount} trend="+8.2%" icon={<Bookmark size={20} />} />
-        <StatCard label="Average AI Match" value="91.4%" trend="+1.2%" icon={<TrendingUp size={20} />} />
       </div>
 
       {/* Lower splits: Recent Campaigns & Chart */}
