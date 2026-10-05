@@ -1,0 +1,4 @@
+certifi
+python-dotenv
+pymongo
+requests
