@@ -16,8 +16,8 @@ const Inquiries = () => {
     setLoading(true);
     try {
       const data = await influencerService.getInquiries();
-      setInquiries(data);
-      setFilteredInquiries(data);
+      setInquiries(data || []);
+      setFilteredInquiries(data || []);
     } catch (err) {
       showToast('Error loading inquiries.', 'error');
     } finally {
@@ -36,7 +36,7 @@ const Inquiries = () => {
     if (statusFilter === 'All') {
       setFilteredInquiries(inquiries);
     } else {
-      setFilteredInquiries(inquiries.filter((i) => i.status === statusFilter));
+      setFilteredInquiries((inquiries || []).filter((i) => i.status === statusFilter));
     }
   }, [statusFilter, inquiries]);
 
@@ -101,10 +101,17 @@ const Inquiries = () => {
           <div style={{ width: '40px', height: '40px', border: '4px solid var(--primary-light)', borderTopColor: 'var(--primary-purple)', borderRadius: '50%', animation: 'spin 0.8s linear infinite', margin: '0 auto 16px auto' }} />
           <span>Syncing inquiries list...</span>
         </div>
-      ) : filteredInquiries.length > 0 ? (
+      ) : filteredInquiries && filteredInquiries.length > 0 ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
           {filteredInquiries.map((inq) => {
             const styles = getStatusStyle(inq.status);
+            const campaignName = inq.campaignName || inq.title || 'Sponsorship Integration Proposal';
+            const companyName = inq.companyName || inq.brand || 'Partner Brand';
+            const budgetDisplay = inq.budgetStr || (inq.budget ? `₹${Number(inq.budget).toLocaleString('en-IN')}` : '₹1,50,000');
+            const deliverablesArray = Array.isArray(inq.deliverables)
+              ? inq.deliverables
+              : (inq.deliverables ? [inq.deliverables] : ['60s Video Integration', 'Instagram Story Cross-post']);
+
             return (
               <div
                 key={inq.id}
@@ -124,29 +131,29 @@ const Inquiries = () => {
                 <div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                     <span style={{ fontSize: '1.05rem', fontWeight: 700, color: 'var(--text-primary)' }}>
-                      {inq.campaignName}
+                      {campaignName}
                     </span>
                     <span style={{ backgroundColor: styles.bg, color: styles.text, fontSize: '0.72rem', fontWeight: 700, padding: '3px 8px', borderRadius: '6px' }}>
-                      {inq.status}
+                      {inq.status || 'New'}
                     </span>
                   </div>
                   <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', display: 'block', marginTop: '6px' }}>
-                    Proposed by: <strong style={{ color: 'var(--text-primary)' }}>{inq.companyName}</strong>
+                    Proposed by: <strong style={{ color: 'var(--text-primary)' }}>{companyName}</strong>
                   </span>
                   
                   {/* Info badges */}
                   <div style={{ display: 'flex', gap: '16px', fontSize: '0.78rem', marginTop: '10px', color: 'var(--text-secondary)', flexWrap: 'wrap' }}>
                     <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                       <DollarSign size={14} style={{ color: 'var(--text-light)' }} />
-                      Budget: <strong>{inq.budgetStr}</strong>
+                      Budget: <strong>{budgetDisplay}</strong>
                     </span>
                     <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                       <Calendar size={14} style={{ color: 'var(--text-light)' }} />
-                      Received: {inq.date}
+                      Received: {inq.date || 'Today'}
                     </span>
                     <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                       <ListCollapse size={14} style={{ color: 'var(--text-light)' }} />
-                      Deliverables: {inq.deliverables.join(', ')}
+                      Deliverables: {deliverablesArray.join(', ')}
                     </span>
                   </div>
                 </div>
@@ -156,7 +163,7 @@ const Inquiries = () => {
                   
                   {/* View details */}
                   <button
-                    onClick={() => navigate(`/influencer/opportunities/${inq.campaignId}`)}
+                    onClick={() => navigate(`/influencer/opportunities/${inq.campaignId || 'camp-1'}`)}
                     style={{
                       padding: '10px 16px',
                       borderRadius: '8px',
@@ -228,7 +235,7 @@ const Inquiries = () => {
         </div>
       ) : (
         <div style={{ backgroundColor: 'white', borderRadius: 'var(--border-radius-lg)', border: '1px solid var(--border-color)', padding: '60px 20px', textAlign: 'center', boxShadow: 'var(--shadow-sm)', maxWidth: '440px', margin: '40px auto 0 auto' }}>
-          <span style={{ fontSize: '32px' }}>✉️</span>
+          <span style={{ fontSize: '32px' }}>📥</span>
           <h3 style={{ fontSize: '1.2rem', fontWeight: 700, marginTop: '10px' }}>Inquiries inbox empty</h3>
           <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', lineHeight: 1.4, marginTop: '4px' }}>Brands will send you direct sponsorship requests once they calculate matching scores on your profile.</p>
         </div>

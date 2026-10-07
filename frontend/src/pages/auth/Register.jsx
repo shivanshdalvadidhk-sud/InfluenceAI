@@ -113,7 +113,7 @@ const Register = () => {
         navigate('/influencer/dashboard');
       }
     } catch (err) {
-      showToast('Registration failed. Try again.', 'error');
+      showToast(err.message || 'Registration failed. Try again.', 'error');
     } finally {
       setLoading(false);
     }

@@ -131,7 +131,7 @@ const CampaignCard = ({ campaign, onDuplicate, onDelete }) => {
             BUDGET ALLOCATION
           </span>
           <span style={{ fontWeight: 700, color: 'var(--text-primary)', fontSize: '0.9rem' }}>
-            {campaign.budgetStr || `₹${Number(campaign.budget).toLocaleString('en-IN')}`}
+            {campaign?.budgetStr || (campaign?.budget ? `₹${Number(campaign.budget).toLocaleString('en-IN')}` : '₹0')}
           </span>
         </div>
         <div>

@@ -104,6 +104,7 @@ src/
 ```bash
 git clone <YOUR_REPOSITORY_URL>
 cd InfluenceAI
+cd frontend
 ```
 
 ### 2. Install dependencies

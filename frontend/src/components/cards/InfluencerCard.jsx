@@ -10,8 +10,10 @@ const InfluencerCard = ({ influencer, showCampaignContext = false, onRemove }) =
   const [isSaved, setIsSaved] = useState(false);
 
   useEffect(() => {
-    setIsSaved(influencerService.isInfluencerSaved(influencer.id));
-  }, [influencer.id]);
+    if (influencer?.id) {
+      setIsSaved(influencerService.isInfluencerSaved(influencer.id));
+    }
+  }, [influencer?.id]);
 
   const handleToggleSave = async (e) => {
     e.stopPropagation();
@@ -205,7 +207,7 @@ const InfluencerCard = ({ influencer, showCampaignContext = false, onRemove }) =
             EST. COLLAB COST
           </span>
           <span style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--text-primary)' }}>
-            ₹{influencer.estimatedCost.toLocaleString('en-IN')}
+            ₹{(influencer?.estimatedCost || (influencer?.subscribers ? Math.round(influencer.subscribers * 0.1) : 95000)).toLocaleString('en-IN')}
           </span>
         </div>
       </div>

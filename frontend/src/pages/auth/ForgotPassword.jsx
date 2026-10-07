@@ -1,23 +1,87 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { authService } from '../../services/authService';
 import { showToast } from '../../components/common/Toast';
-import { Mail, ArrowLeft, Send } from 'lucide-react';
+import { Mail, ArrowLeft, Send, KeyRound, ShieldCheck, RefreshCw } from 'lucide-react';
 
 const ForgotPassword = () => {
   const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
-  const [success, setSuccess] = useState(false);
+  const [step, setStep] = useState(1); // Step 1: Email, Step 2: 6-Digit OTP
 
-  const handleSubmit = async (e) => {
+  // 6-digit OTP array state
+  const [otpDigits, setOtpDigits] = useState(['', '', '', '', '', '']);
+  const inputRefs = [useRef(null), useRef(null), useRef(null), useRef(null), useRef(null), useRef(null)];
+
+  const handleSendOTP = async (e) => {
     e.preventDefault();
-    if (!email) return;
+    if (!email) {
+      showToast('Please enter your email address.', 'error');
+      return;
+    }
 
     setLoading(true);
-    await new Promise((resolve) => setTimeout(resolve, 800));
-    setLoading(false);
-    setSuccess(true);
-    showToast('Reset link dispatched to email.', 'info');
+    try {
+      const msg = await authService.forgotPassword(email);
+      setStep(2);
+      showToast(msg || `6-digit OTP code sent to ${email}`, 'success');
+    } catch (err) {
+      showToast(err.message || 'Error sending OTP code.', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleOtpChange = (index, value) => {
+    if (!/^\d*$/.test(value)) return;
+
+    const newDigits = [...otpDigits];
+    newDigits[index] = value.slice(-1);
+    setOtpDigits(newDigits);
+
+    // Auto-advance to next input field
+    if (value && index < 5) {
+      inputRefs[index + 1].current?.focus();
+    }
+  };
+
+  const handleOtpKeyDown = (index, e) => {
+    if (e.key === 'Backspace' && !otpDigits[index] && index > 0) {
+      inputRefs[index - 1].current?.focus();
+    }
+  };
+
+  const handleOtpPaste = (e) => {
+    e.preventDefault();
+    const pastedData = e.clipboardData.getData('text').trim();
+    if (!/^\d{6}$/.test(pastedData)) {
+      showToast('Please paste a valid 6-digit OTP code', 'error');
+      return;
+    }
+    const digits = pastedData.split('');
+    setOtpDigits(digits);
+    inputRefs[5].current?.focus();
+  };
+
+  const handleVerifyOTP = async (e) => {
+    e.preventDefault();
+    const otpCode = otpDigits.join('');
+    if (otpCode.length !== 6) {
+      showToast('Please enter all 6 digits of the OTP code.', 'error');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await authService.verifyOTP(email, otpCode);
+      showToast('OTP Code Verified successfully!', 'success');
+      navigate(`/reset-password?email=${encodeURIComponent(email)}&verified=true`);
+    } catch (err) {
+      showToast(err.message || 'Invalid 6-digit OTP code.', 'error');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -58,7 +122,7 @@ const ForgotPassword = () => {
             fontSize: '20px',
           }}
         >
-          ✨
+          ⚡
         </div>
         <span style={{ fontSize: '1.4rem', fontWeight: 800, fontFamily: 'var(--font-heading)' }}>
           Influence<span style={{ color: 'var(--primary-purple)' }}>AI</span>
@@ -72,12 +136,12 @@ const ForgotPassword = () => {
           border: '1px solid var(--border-color)',
           padding: '40px 32px',
           width: '100%',
-          maxWidth: '440px',
+          maxWidth: '460px',
           boxShadow: 'var(--shadow-premium)',
         }}
       >
         <button
-          onClick={() => navigate('/login')}
+          onClick={() => (step === 2 ? setStep(1) : navigate('/login'))}
           style={{
             display: 'flex',
             alignItems: 'center',
@@ -93,25 +157,25 @@ const ForgotPassword = () => {
           }}
         >
           <ArrowLeft size={14} />
-          <span>Back to Login</span>
+          <span>{step === 2 ? 'Change Email' : 'Back to Login'}</span>
         </button>
 
-        {!success ? (
+        {step === 1 ? (
           <>
             <h2 style={{ fontSize: '1.5rem', fontFamily: 'var(--font-heading)', marginBottom: '8px' }}>
-              Recover Your Password
+              Forgot Password OTP
             </h2>
             <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginBottom: '24px', lineHeight: 1.4 }}>
-              Enter your registered email below and we will send you a secure link to reset your account credentials.
+              Enter your registered email address below. We will send a secure 6-digit OTP code to your inbox.
             </p>
 
-            <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+            <form onSubmit={handleSendOTP} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                 <label style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Email Address</label>
                 <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
                   <input
                     type="email"
-                    placeholder="name@company.com"
+                    placeholder="you@example.com"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     required
@@ -157,55 +221,117 @@ const ForgotPassword = () => {
                 ) : (
                   <>
                     <Send size={16} />
-                    <span>Send Reset Instructions</span>
+                    <span>Send 6-Digit OTP Code</span>
                   </>
                 )}
               </button>
             </form>
           </>
         ) : (
-          <div style={{ textAlign: 'center', padding: '10px 0' }}>
-            <div
-              style={{
-                width: '56px',
-                height: '56px',
-                borderRadius: '50%',
-                backgroundColor: 'var(--primary-light)',
-                color: 'var(--primary-purple)',
-                display: 'inline-flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                marginBottom: '16px',
-                fontSize: '24px',
-              }}
-            >
-              ✉️
+          <>
+            <div style={{ textAlign: 'center', marginBottom: '16px' }}>
+              <div
+                style={{
+                  width: '52px',
+                  height: '52px',
+                  borderRadius: '50%',
+                  backgroundColor: 'var(--primary-light)',
+                  color: 'var(--primary-purple)',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  marginBottom: '12px',
+                }}
+              >
+                <KeyRound size={26} />
+              </div>
+              <h2 style={{ fontSize: '1.4rem', fontFamily: 'var(--font-heading)', marginBottom: '4px' }}>
+                Enter 6-Digit OTP Code
+              </h2>
+              <p style={{ color: 'var(--text-secondary)', fontSize: '0.82rem' }}>
+                Security code dispatched to <strong style={{ color: 'var(--text-primary)' }}>{email}</strong>
+              </p>
             </div>
-            <h2 style={{ fontSize: '1.5rem', fontFamily: 'var(--font-heading)', marginBottom: '8px' }}>
-              Check Your Inbox
-            </h2>
-            <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', lineHeight: 1.5, marginBottom: '24px' }}>
-              We have dispatched instructions to <strong style={{ color: 'var(--text-primary)' }}>{email}</strong>.
-              If you don't receive it shortly, please verify your spam directory.
-            </p>
-            <button
-              onClick={() => {
-                setSuccess(false);
-                setEmail('');
-              }}
-              style={{
-                padding: '10px 20px',
-                border: '1px solid var(--border-color)',
-                borderRadius: '8px',
-                backgroundColor: 'transparent',
-                cursor: 'pointer',
-                fontWeight: 600,
-                fontSize: '0.85rem',
-              }}
-            >
-              Try Another Address
-            </button>
-          </div>
+
+
+            <form onSubmit={handleVerifyOTP} style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+              {/* 6 Digit Input Boxes */}
+              <div
+                style={{ display: 'flex', justifyContent: 'center', gap: '10px' }}
+                onPaste={handleOtpPaste}
+              >
+                {otpDigits.map((digit, index) => (
+                  <input
+                    key={index}
+                    ref={inputRefs[index]}
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={1}
+                    value={digit}
+                    onChange={(e) => handleOtpChange(index, e.target.value)}
+                    onKeyDown={(e) => handleOtpKeyDown(index, e)}
+                    style={{
+                      width: '46px',
+                      height: '52px',
+                      fontSize: '1.3rem',
+                      fontWeight: 700,
+                      textAlign: 'center',
+                      borderRadius: '10px',
+                      border: digit ? '2px solid var(--primary-purple)' : '1px solid var(--border-color)',
+                      backgroundColor: digit ? 'var(--primary-light)' : '#FAFAFA',
+                      outline: 'none',
+                      color: 'var(--text-primary)',
+                      transition: 'all 0.15s ease',
+                    }}
+                  />
+                ))}
+              </div>
+
+              <button
+                type="submit"
+                disabled={loading}
+                className="button-gradient"
+                style={{
+                  padding: '12px',
+                  borderRadius: '8px',
+                  fontWeight: 600,
+                  fontSize: '0.9rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '8px',
+                }}
+              >
+                {loading ? 'Verifying OTP...' : (
+                  <>
+                    <ShieldCheck size={18} />
+                    <span>Verify OTP & Reset Password</span>
+                  </>
+                )}
+              </button>
+
+              <div style={{ textAlign: 'center' }}>
+                <button
+                  type="button"
+                  onClick={handleSendOTP}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: 'var(--primary-purple)',
+                    fontWeight: 600,
+                    fontSize: '0.82rem',
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                  }}
+                >
+                  <RefreshCw size={14} />
+                  <span>Resend 6-Digit OTP</span>
+                </button>
+              </div>
+            </form>
+          </>
         )}
       </div>
     </div>

@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import PageHeader from '../../components/layout/PageHeader';
 import { authService } from '../../services/authService';
+import { influencerService } from '../../services/influencerService';
 import { showToast } from '../../components/common/Toast';
 import { INDIAN_STATES } from '../../data/mockData';
 import { User, Video, Radio, DollarSign, Save } from 'lucide-react';
 
 const InfluencerProfile = () => {
   const [currentUser, setCurrentUser] = useState(null);
+  const [saving, setSaving] = useState(false);
 
   // States
   const [fullName, setFullName] = useState('');
@@ -67,87 +69,90 @@ const InfluencerProfile = () => {
     }
   };
 
-  const handleSave = (e) => {
+  const handleSave = async (e) => {
     e.preventDefault();
     if (!currentUser) return;
 
-    const updated = {
-      ...currentUser,
+    setSaving(true);
+
+    const updatedData = {
       name: fullName,
       creatorName,
       bio,
-      city: '', // city headquarters removed
       state,
       languages: currentUser.languages || ['English'],
       language: currentUser.language || 'English',
       primaryPlatform: 'YouTube',
       handle,
-      subscribers,
-      avgViews,
-      engagementRate: engagement,
-      category: selectedCategories[0] || category,
+      subscribers: Number(subscribers),
+      avgViews: Number(avgViews),
+      engagementRate: Number(engagement),
+      category: selectedCategories.length > 0 ? selectedCategories[0] : category,
       priceRates: {
-        starting: rateStarting,
-        dedicated: rateDedicated,
-        integrated: rateIntegrated,
-        short: rateShort
-      }
+        starting: Number(rateStarting),
+        dedicated: Number(rateDedicated),
+        integrated: Number(rateIntegrated),
+        short: Number(rateShort)
+      },
+      avatar: currentUser.avatar
     };
 
-    authService.updateProfile(updated);
-    showToast('Creator profile statistics saved.', 'success');
+    try {
+      const savedUser = await influencerService.updateProfile(updatedData);
+      setCurrentUser(savedUser);
+      showToast('Profile updated & synced to Supabase database successfully!', 'success');
+    } catch (err) {
+      showToast(err.message || 'Error updating profile.', 'error');
+    } finally {
+      setSaving(false);
+    }
   };
-
-  if (!currentUser) return null;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', paddingBottom: '50px' }}>
       
       <PageHeader
-        title="My Creator Profile"
-        subtitle="Manage your platforms verification, rate cards, categories niches & languages settings."
+        title="Influencer Account Profile"
+        subtitle="Update your channel metrics, content categories, and collaboration rate cards."
         icon={<User size={22} />}
       />
 
       <form onSubmit={handleSave} style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
         
-        {/* Basic Info */}
+        {/* Personal basic information */}
         <div style={{ backgroundColor: 'white', borderRadius: 'var(--border-radius-lg)', border: '1px solid var(--border-color)', padding: '28px', boxShadow: 'var(--shadow-sm)', display: 'flex', flexDirection: 'column', gap: '20px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', borderBottom: '1px solid var(--border-light)', paddingBottom: '12px' }}>
-            <User size={16} style={{ color: 'var(--primary-purple)' }} />
-            <h3 style={{ fontSize: '0.85rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--text-secondary)' }}>Basic Information</h3>
+            <Radio size={16} style={{ color: 'var(--primary-purple)' }} />
+            <h3 style={{ fontSize: '0.85rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--text-secondary)' }}>Creator Identity Details</h3>
           </div>
 
-          <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap', alignItems: 'center' }}>
-            <img src={currentUser.avatar} alt="" style={{ width: '80px', height: '80px', borderRadius: '50%', objectFit: 'cover', border: '3px solid var(--primary-light)' }} />
-            <div style={{ flexGrow: 1, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                <label style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Full Name *</label>
-                <input type="text" value={fullName} onChange={(e) => setFullName(e.target.value)} required style={{ padding: '10px', borderRadius: '8px', border: '1px solid var(--border-color)', fontSize: '0.85rem' }} />
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                <label style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Creator / Channel Name *</label>
-                <input type="text" value={creatorName} onChange={(e) => setCreatorName(e.target.value)} required style={{ padding: '10px', borderRadius: '8px', border: '1px solid var(--border-color)', fontSize: '0.85rem' }} />
-              </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '16px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <label style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Full Legal Name *</label>
+              <input type="text" value={fullName} onChange={(e) => setFullName(e.target.value)} required style={{ padding: '10px', borderRadius: '8px', border: '1px solid var(--border-color)', fontSize: '0.85rem' }} />
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <label style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Creator / Public Screen Name *</label>
+              <input type="text" value={creatorName} onChange={(e) => setCreatorName(e.target.value)} required style={{ padding: '10px', borderRadius: '8px', border: '1px solid var(--border-color)', fontSize: '0.85rem' }} />
+            </div>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '16px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <label style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)' }}>State / UT *</label>
+              <select value={state} onChange={(e) => setState(e.target.value)} style={{ padding: '10px', borderRadius: '8px', border: '1px solid var(--border-color)', fontSize: '0.85rem', backgroundColor: 'white' }}>
+                {INDIAN_STATES.map((st) => (
+                  <option key={st} value={st}>
+                    {st}
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-            <label style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Creator Region State / UT *</label>
-            <select
-              value={state}
-              onChange={(e) => setState(e.target.value)}
-              required
-              style={{ padding: '10px', borderRadius: '8px', border: '1px solid var(--border-color)', fontSize: '0.85rem', backgroundColor: 'white' }}
-            >
-              {INDIAN_STATES.map((s) => (
-                <option key={s} value={s}>{s}</option>
-              ))}
-            </select>
-          </div>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-            <label style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Creator Biography (Short Bio) *</label>
+            <label style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Biography & Channel Description *</label>
             <textarea rows={3} value={bio} onChange={(e) => setBio(e.target.value)} required style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid var(--border-color)', fontSize: '0.85rem', fontFamily: 'var(--font-body)', resize: 'vertical' }} />
           </div>
         </div>
@@ -245,9 +250,14 @@ const InfluencerProfile = () => {
 
         {/* Save button */}
         <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-          <button type="submit" className="button-gradient" style={{ padding: '14px 28px', borderRadius: '10px', fontWeight: 600, fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <button
+            type="submit"
+            disabled={saving}
+            className="button-gradient"
+            style={{ padding: '14px 28px', borderRadius: '10px', fontWeight: 600, fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '8px' }}
+          >
             <Save size={16} />
-            <span>Save Profile Revisions</span>
+            <span>{saving ? 'Saving to Database...' : 'Save Profile Revisions'}</span>
           </button>
         </div>
 

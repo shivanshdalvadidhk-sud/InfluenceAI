@@ -13,24 +13,27 @@ const DashboardLayout = ({ allowedRole }) => {
   const isAuthenticated = authService.isAuthenticated();
   const currentRole = authService.getCurrentRole();
 
-  // Inquiry Modal States
+  // Responsive Drawer state
+  const [isMobileOpen, setIsMobileOpen] = useState(false);
+
+  // Global Sponsorship Inquiry Modal State
   const [openInquiry, setOpenInquiry] = useState(false);
   const [selectedCreator, setSelectedCreator] = useState(null);
+  const [campaigns, setCampaigns] = useState([]);
   const [selectedCampaignId, setSelectedCampaignId] = useState('');
   const [inquiryDeliverables, setInquiryDeliverables] = useState([]);
-  const [customInquiryBudget, setCustomInquiryBudget] = useState(0);
+  const [customInquiryBudget, setCustomInquiryBudget] = useState(95000);
   const [sendingInquiry, setSendingInquiry] = useState(false);
-  const [campaigns, setCampaigns] = useState([]);
 
   useEffect(() => {
-    if (!isAuthenticated || currentRole !== 'Company') return;
+    if (!isAuthenticated || (allowedRole && currentRole !== allowedRole)) return;
 
-    // Load all campaigns
+    // Load brand active campaigns for inquiry modal selector
     const loadCampaigns = async () => {
       try {
         const campList = await campaignService.getCampaigns();
-        setCampaigns(campList);
-        if (campList.length > 0) {
+        setCampaigns(campList || []);
+        if (campList && campList.length > 0) {
           setSelectedCampaignId(campList[0].id);
         }
       } catch (err) {
@@ -43,8 +46,8 @@ const DashboardLayout = ({ allowedRole }) => {
     const handleOpenInquiry = (e) => {
       const creator = e.detail;
       setSelectedCreator(creator);
-      setInquiryDeliverables([creator.format] || []);
-      setCustomInquiryBudget(creator.estimatedCost);
+      setInquiryDeliverables(creator?.format ? [creator.format] : []);
+      setCustomInquiryBudget(creator?.estimatedCost || 95000);
       setOpenInquiry(true);
     };
 
@@ -52,7 +55,7 @@ const DashboardLayout = ({ allowedRole }) => {
     return () => {
       window.removeEventListener('influenceai_open_inquiry_modal', handleOpenInquiry);
     };
-  }, [isAuthenticated, currentRole]);
+  }, [isAuthenticated, currentRole, allowedRole]);
 
   const handleInquirySubmit = async () => {
     if (!selectedCampaignId) {
@@ -70,7 +73,7 @@ const DashboardLayout = ({ allowedRole }) => {
         campaignId: selectedCampaignId,
         campaignName: campaigns.find((c) => c.id === selectedCampaignId)?.name || 'Campaign Launch',
         budget: customInquiryBudget,
-        budgetStr: `₹${Number(customInquiryBudget).toLocaleString('en-IN')}`,
+        budgetStr: `₹${(Number(customInquiryBudget) || 0).toLocaleString('en-IN')}`,
         deliverables: inquiryDeliverables
       });
       showToast(`Inquiry dispatched to ${selectedCreator.name}!`, 'success');
@@ -100,14 +103,14 @@ const DashboardLayout = ({ allowedRole }) => {
 
   return (
     <div className="app-container">
-      {/* Sidebar - fixed left */}
-      <Sidebar />
+      {/* Responsive Sidebar */}
+      <Sidebar isMobileOpen={isMobileOpen} onClose={() => setIsMobileOpen(false)} />
 
-      {/* Main Panel - slides left margin to avoid overlapping fixed sidebar */}
+      {/* Main Panel */}
       <div className="main-content">
-        <Navbar />
+        <Navbar onMenuToggle={() => setIsMobileOpen(!isMobileOpen)} />
         
-        {/* Child sub-routes wrapper with top margin for fixed header navbar */}
+        {/* Child sub-routes wrapper */}
         <div
           style={{
             marginTop: 'calc(var(--navbar-height) + 12px)',
@@ -125,7 +128,7 @@ const DashboardLayout = ({ allowedRole }) => {
       {selectedCreator && (
         <Dialog open={openInquiry} onClose={() => setOpenInquiry(false)} maxWidth="sm" fullWidth>
           <DialogTitle style={{ fontFamily: 'var(--font-heading)', fontWeight: 700, fontSize: '1.25rem' }}>
-            ✨ Send Sponsorship Inquiry
+            ✉️ Send Sponsorship Inquiry
           </DialogTitle>
           <DialogContent style={{ display: 'flex', flexDirection: 'column', gap: '18px', paddingTop: '8px' }}>
             
@@ -134,7 +137,7 @@ const DashboardLayout = ({ allowedRole }) => {
               <img src={selectedCreator.avatar} alt="" style={{ width: '42px', height: '42px', borderRadius: '50%', objectFit: 'cover' }} />
               <div>
                 <span style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--text-primary)', display: 'block' }}>{selectedCreator.name}</span>
-                <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{selectedCreator.handle} • Collab Rate: ₹{selectedCreator.estimatedCost.toLocaleString('en-IN')}</span>
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{selectedCreator.handle} • Collab Rate: ₹{(selectedCreator.estimatedCost || 95000).toLocaleString('en-IN')}</span>
               </div>
             </div>
 

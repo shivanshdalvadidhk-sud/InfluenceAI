@@ -114,7 +114,7 @@ const CompanyAnalytics = () => {
                 <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" vertical={false} />
                 <XAxis dataKey="name" tick={{ fontSize: 10 }} axisLine={false} tickLine={false} />
                 <YAxis tick={{ fontSize: 10 }} axisLine={false} tickLine={false} formatter={(v) => `₹${v/1000}K`} />
-                <Tooltip formatter={(v) => `₹${v.toLocaleString('en-IN')}`} />
+                <Tooltip formatter={(v) => `₹${(v || 0).toLocaleString('en-IN')}`} />
                 <Line type="monotone" dataKey="avg" stroke="var(--accent-blue)" strokeWidth={3} dot={{ r: 4 }} activeDot={{ r: 6 }} />
               </LineChart>
             </ResponsiveContainer>
