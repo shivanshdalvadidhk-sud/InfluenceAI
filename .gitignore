@@ -22,3 +22,15 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Environment files may contain credentials.
+.env
+.env.*
+!.env.example
+
+# Local Python environments, caches, and generated ML artifacts.
+.venv/
+__pycache__/
+.pytest_cache/
+*.py[cod]
+ml-service/models/*.pkl

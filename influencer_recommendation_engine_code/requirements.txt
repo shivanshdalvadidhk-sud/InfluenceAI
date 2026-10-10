@@ -1,0 +1,9 @@
+fastapi>=0.110
+uvicorn[standard]>=0.27
+pandas>=2.1
+numpy>=1.26
+sqlalchemy>=2.0
+psycopg2-binary>=2.9
+sentence-transformers>=3.0
+scikit-learn>=1.4
+python-dotenv>=1.0
