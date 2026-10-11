@@ -1,8 +1,8 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Calendar, Trash, Copy, Eye, BarChart } from 'lucide-react';
+import { Calendar, Trash, Copy, Eye, ExternalLink, Users, Video as Youtube, Sparkles } from 'lucide-react';
 
-const CampaignCard = ({ campaign, onDuplicate, onDelete }) => {
+const CampaignCard = ({ campaign, onDuplicate, onDelete, onViewHistory }) => {
   const navigate = useNavigate();
 
   const getStatusColor = (status) => {
@@ -19,6 +19,13 @@ const CampaignCard = ({ campaign, onDuplicate, onDelete }) => {
   };
 
   const colors = getStatusColor(campaign.status);
+  const recs = Array.isArray(campaign.recommendations) ? campaign.recommendations : [];
+  const formatSubs = (num) => {
+    const n = Number(num) || 0;
+    if (n >= 1000000) return `${(n / 1000000).toFixed(2)}M`;
+    if (n >= 1000) return `${(n / 1000).toFixed(1)}K`;
+    return n.toLocaleString('en-IN');
+  };
 
   return (
     <div
@@ -31,7 +38,7 @@ const CampaignCard = ({ campaign, onDuplicate, onDelete }) => {
         flexDirection: 'column',
         gap: '16px',
         boxShadow: 'var(--shadow-sm)',
-        position: 'relative',
+        position: 'relative'
       }}
       className="card-hover-lift"
     >
@@ -42,10 +49,10 @@ const CampaignCard = ({ campaign, onDuplicate, onDelete }) => {
           alignItems: 'center',
           justifyContent: 'space-between',
           flexWrap: 'wrap',
-          gap: '10px',
+          gap: '10px'
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
           <span
             style={{
               backgroundColor: 'rgba(124, 58, 237, 0.08)',
@@ -55,9 +62,10 @@ const CampaignCard = ({ campaign, onDuplicate, onDelete }) => {
               padding: '4px 10px',
               borderRadius: '12px',
               fontFamily: 'var(--font-heading)',
+              textTransform: 'uppercase'
             }}
           >
-            {campaign.category}
+            {campaign.category || 'fashion'}
           </span>
           <span
             style={{
@@ -67,10 +75,24 @@ const CampaignCard = ({ campaign, onDuplicate, onDelete }) => {
               fontWeight: 700,
               padding: '4px 10px',
               borderRadius: '12px',
-              fontFamily: 'var(--font-heading)',
+              fontFamily: 'var(--font-heading)'
             }}
           >
-            {campaign.state}
+            Country: {campaign.target_country || campaign.targetCountry || campaign.state || 'India'}
+          </span>
+          <span
+            style={{
+              backgroundColor: 'rgba(59, 130, 246, 0.08)',
+              color: 'var(--accent-blue)',
+              fontSize: '0.75rem',
+              fontWeight: 700,
+              padding: '4px 10px',
+              borderRadius: '12px',
+              fontFamily: 'var(--font-heading)',
+              textTransform: 'uppercase'
+            }}
+          >
+            Goal: {campaign.campaign_goal || campaign.campaignGoal || campaign.goal || 'awareness'}
           </span>
         </div>
 
@@ -82,14 +104,14 @@ const CampaignCard = ({ campaign, onDuplicate, onDelete }) => {
             fontWeight: 700,
             padding: '4px 10px',
             borderRadius: '12px',
-            fontFamily: 'var(--font-heading)',
+            fontFamily: 'var(--font-heading)'
           }}
         >
           Status: {campaign.status}
         </span>
       </div>
 
-      {/* Campaign Name */}
+      {/* Campaign Name & Description */}
       <div>
         <h3
           style={{
@@ -97,7 +119,7 @@ const CampaignCard = ({ campaign, onDuplicate, onDelete }) => {
             fontWeight: 700,
             fontFamily: 'var(--font-heading)',
             color: 'var(--text-primary)',
-            margin: 0,
+            margin: 0
           }}
         >
           {campaign.name}
@@ -107,14 +129,14 @@ const CampaignCard = ({ campaign, onDuplicate, onDelete }) => {
             fontSize: '0.85rem',
             color: 'var(--text-secondary)',
             marginTop: '6px',
-            lineHeight: 1.4,
+            lineHeight: 1.4
           }}
         >
-          {campaign.description}
+          {campaign.campaign_description || campaign.description}
         </p>
       </div>
 
-      {/* Campaign Details Info */}
+      {/* Campaign AI Engine Parameters Info */}
       <div
         style={{
           display: 'grid',
@@ -123,31 +145,31 @@ const CampaignCard = ({ campaign, onDuplicate, onDelete }) => {
           backgroundColor: '#F8FAFC',
           borderRadius: 'var(--border-radius-md)',
           padding: '16px',
-          fontSize: '0.8rem',
+          fontSize: '0.8rem'
         }}
       >
         <div>
           <span style={{ color: 'var(--text-light)', display: 'block', fontWeight: 500, marginBottom: '2px' }}>
-            BUDGET ALLOCATION
+            BUDGET (INR)
           </span>
           <span style={{ fontWeight: 700, color: 'var(--text-primary)', fontSize: '0.9rem' }}>
-            {campaign?.budgetStr || (campaign?.budget ? `₹${Number(campaign.budget).toLocaleString('en-IN')}` : '₹0')}
-          </span>
-        </div>
-        <div>
-          <span style={{ color: 'var(--text-light)', display: 'block', fontWeight: 500, marginBottom: '2px' }}>
-            TARGET AUDIENCE
-          </span>
-          <span style={{ fontWeight: 700, color: 'var(--text-primary)', fontSize: '0.9rem' }}>
-            {campaign.audienceAgeRange ? `${campaign.audienceAgeRange[0]}-${campaign.audienceAgeRange[1]} Yrs` : '18-35 Yrs'} ({campaign.audienceGender || 'All'})
+            {campaign?.budgetStr || (campaign?.budget ? `₹${Number(campaign.budget).toLocaleString('en-IN')}` : '₹1,00,000')}
           </span>
         </div>
         <div>
           <span style={{ color: 'var(--text-light)', display: 'block', fontWeight: 500, marginBottom: '2px' }}>
             CAMPAIGN GOAL
           </span>
-          <span style={{ fontWeight: 700, color: 'var(--accent-blue)', fontSize: '0.9rem' }}>
-            {campaign.goal}
+          <span style={{ fontWeight: 700, color: 'var(--accent-blue)', fontSize: '0.9rem', textTransform: 'capitalize' }}>
+            {campaign.campaign_goal || campaign.campaignGoal || campaign.goal || 'awareness'}
+          </span>
+        </div>
+        <div>
+          <span style={{ color: 'var(--text-light)', display: 'block', fontWeight: 500, marginBottom: '2px' }}>
+            TOP N / STRICT NICHE
+          </span>
+          <span style={{ fontWeight: 700, color: 'var(--text-primary)', fontSize: '0.9rem' }}>
+            Top {campaign.top_n || campaign.topN || 10} ({campaign.strict_category !== false ? 'Strict' : 'Broad'})
           </span>
         </div>
         <div>
@@ -155,10 +177,100 @@ const CampaignCard = ({ campaign, onDuplicate, onDelete }) => {
             TOP AI MATCH CANDIDATE
           </span>
           <span style={{ fontWeight: 700, color: 'var(--primary-purple)', fontSize: '0.9rem' }}>
-            {campaign.topMatch || 'Calculating...'}
+            {campaign.topMatch || 'Ready for AI Match'}
           </span>
         </div>
       </div>
+
+      {/* Stored Recommended Channels Preview (if available) */}
+      {recs.length > 0 && (
+        <div
+          style={{
+            border: '1px solid rgba(124, 58, 237, 0.18)',
+            backgroundColor: 'rgba(124, 58, 237, 0.03)',
+            borderRadius: '12px',
+            padding: '12px 14px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '10px'
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--primary-purple)', display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+              <Sparkles size={13} /> STORED AI RECOMMENDED CHANNELS ({recs.length})
+            </span>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '10px' }}>
+            {recs.slice(0, 3).map((rec, idx) => {
+              const name = rec.channel_name || rec.name || 'YouTube Channel';
+              const subs = Number(rec.subscriber_count ?? rec.subscribers ?? 0);
+              const url = rec.channel_url || rec.profileUrl || '';
+              const fallback = `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=6366f1&color=fff&size=120`;
+              const thumb = rec.thumbnail_url || rec.avatar || fallback;
+              const score = rec.recommendation_score !== undefined ? Math.round(rec.recommendation_score * 100) : rec.finalScore || 85;
+              return (
+                <div
+                  key={rec.channel_id || rec.id || idx}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '10px',
+                    backgroundColor: '#FFFFFF',
+                    padding: '8px 10px',
+                    borderRadius: '10px',
+                    border: '1px solid var(--border-light)'
+                  }}
+                >
+                  <img
+                    src={thumb}
+                    alt={name}
+                    referrerPolicy="no-referrer"
+                    onError={(e) => {
+                      e.currentTarget.onerror = null;
+                      e.currentTarget.src = fallback;
+                    }}
+                    style={{ width: '38px', height: '38px', borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }}
+                  />
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <div style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      #{rec.rank || idx + 1} {name}
+                    </div>
+                    <div style={{ fontSize: '0.72rem', color: 'var(--primary-purple)', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                        <Users size={11} /> {formatSubs(subs)} subs
+                      </span>
+                      <span>•</span>
+                      <span style={{ color: '#059669' }}>{score}% Match</span>
+                    </div>
+                    {url && (
+                      <a
+                        href={url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{
+                          fontSize: '0.7rem',
+                          color: 'var(--accent-red)',
+                          backgroundColor: 'rgba(239, 68, 68, 0.08)',
+                          padding: '2px 7px',
+                          borderRadius: '6px',
+                          textDecoration: 'none',
+                          fontWeight: 700,
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          marginTop: '3px'
+                        }}
+                      >
+                        <Youtube size={11} /> Channel
+                      </a>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Bottom section with Date & Actions */}
       <div
@@ -170,7 +282,7 @@ const CampaignCard = ({ campaign, onDuplicate, onDelete }) => {
           paddingTop: '16px',
           marginTop: 'auto',
           flexWrap: 'wrap',
-          gap: '12px',
+          gap: '12px'
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-secondary)', fontSize: '0.75rem' }}>
@@ -178,10 +290,11 @@ const CampaignCard = ({ campaign, onDuplicate, onDelete }) => {
           <span>Created on {campaign.createdDate}</span>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
           {onDelete && (
             <button
               onClick={() => onDelete(campaign.id)}
+              title="Delete Campaign"
               style={{
                 border: '1px solid rgba(239, 68, 68, 0.2)',
                 backgroundColor: 'transparent',
@@ -192,10 +305,8 @@ const CampaignCard = ({ campaign, onDuplicate, onDelete }) => {
                 alignItems: 'center',
                 justifyContent: 'center',
                 color: 'var(--accent-red)',
-                transition: 'all 0.2s',
+                transition: 'all 0.2s'
               }}
-              onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'rgba(239, 68, 68, 0.05)')}
-              onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
             >
               <Trash size={14} />
             </button>
@@ -204,6 +315,7 @@ const CampaignCard = ({ campaign, onDuplicate, onDelete }) => {
           {onDuplicate && (
             <button
               onClick={() => onDuplicate(campaign.id)}
+              title="Duplicate Campaign"
               style={{
                 border: '1px solid var(--border-color)',
                 backgroundColor: 'transparent',
@@ -214,20 +326,41 @@ const CampaignCard = ({ campaign, onDuplicate, onDelete }) => {
                 alignItems: 'center',
                 justifyContent: 'center',
                 color: 'var(--text-secondary)',
-                transition: 'all 0.2s',
+                transition: 'all 0.2s'
               }}
-              onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--border-light)')}
-              onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
             >
               <Copy size={14} />
+            </button>
+          )}
+
+          {onViewHistory && (
+            <button
+              onClick={() => onViewHistory(campaign.id)}
+              style={{
+                backgroundColor: '#F1F5F9',
+                color: 'var(--text-primary)',
+                border: '1px solid var(--border-color)',
+                borderRadius: '8px',
+                padding: '8px 12px',
+                fontFamily: 'var(--font-heading)',
+                fontSize: '0.78rem',
+                fontWeight: 600,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '5px'
+              }}
+            >
+              <Sparkles size={13} />
+              <span>Run History</span>
             </button>
           )}
 
           <button
             onClick={() => navigate(`/company/recommendations?campaign=${campaign.id}`)}
             style={{
-              backgroundColor: 'var(--primary-light)',
-              color: 'var(--primary-purple)',
+              backgroundColor: 'var(--primary-purple)',
+              color: '#FFFFFF',
               border: 'none',
               borderRadius: '8px',
               padding: '8px 14px',
@@ -239,15 +372,7 @@ const CampaignCard = ({ campaign, onDuplicate, onDelete }) => {
               alignItems: 'center',
               justifyContent: 'center',
               gap: '6px',
-              transition: 'all 0.2s',
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.backgroundColor = 'var(--primary-purple)';
-              e.currentTarget.style.color = '#FFFFFF';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.backgroundColor = 'var(--primary-light)';
-              e.currentTarget.style.color = 'var(--primary-purple)';
+              transition: 'all 0.2s'
             }}
           >
             <Eye size={14} />

@@ -2,38 +2,47 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import PageHeader from '../../components/layout/PageHeader';
 import { campaignService } from '../../services/campaignService';
+import {
+  recommendationService,
+  AI_ENGINE_CATEGORIES,
+  AI_CAMPAIGN_GOALS,
+  AI_TARGET_COUNTRIES
+} from '../../services/recommendationService';
 import { showToast } from '../../components/common/Toast';
-import { Sparkles, ArrowRight, Layout, Sliders, CheckCircle2 } from 'lucide-react';
-import { Slider } from '@mui/material';
-import { INDIAN_STATES } from '../../data/mockData';
+import { Sparkles, ArrowRight, Layout, CheckCircle2, Info } from 'lucide-react';
 
 const CreateCampaign = () => {
   const navigate = useNavigate();
-  const [name, setName] = useState('Festive Tech & Lifestyle YouTube Launch 2026');
-  const [budget, setBudget] = useState(250000);
-  const [ageRange, setAgeRange] = useState([18, 35]);
-  const [description, setDescription] = useState(
-    'Sponsoring dedicated review videos and 60-second integrated segments with top Indian tech and lifestyle YouTubers to showcase our products.'
-  );
+
+  const [name, setName] = useState('');
+  const [category, setCategory] = useState('fashion');
+  const [campaignDescription, setCampaignDescription] = useState('');
+  const [budgetInr, setBudgetInr] = useState(150000);
+  const [targetCountry, setTargetCountry] = useState('India');
+  const [campaignGoal, setCampaignGoal] = useState('awareness');
+  const [topN, setTopN] = useState(10);
+  const [strictCategory, setStrictCategory] = useState(true);
   const [deliverables, setDeliverables] = useState(['Dedicated Video', 'Integrated Sponsor Segment']);
-  const [category, setCategory] = useState('Technology');
-  const [state, setState] = useState('Karnataka');
-  const [gender, setGender] = useState('All');
-  const [goal, setGoal] = useState('Brand Awareness');
-  const [platform, setPlatform] = useState('YouTube');
 
   // Loading animation states
   const [loading, setLoading] = useState(false);
   const [loadingStep, setLoadingStep] = useState(0);
 
   const loadingSteps = [
-    'Initializing recommendation pipeline...',
-    'Scraping candidate pools in India database...',
-    'Filtering candidates by location & budget limits...',
-    'Sentence-BERT analyzing campaign semantic relevance...',
-    'Calculating PageRank and Betweenness Network scores...',
-    'Running XGBoost suitability model & ranking candidates...'
+    'Analyzing campaign brief and target criteria...',
+    'Filtering verified YouTube channels by category, country & budget tier...',
+    'Evaluating content relevance and channel compatibility...',
+    'Scoring audience engagement metrics for your campaign goal...',
+    'Ranking top creator matches & saving results to history...'
   ];
+
+  const getBudgetTierLabel = (val) => {
+    const b = Number(val) || 0;
+    if (b < 10000) return 'Eligible Tier: Nano (< 10K subscribers)';
+    if (b < 50000) return 'Eligible Tiers: Nano & Micro (< 100K subscribers)';
+    if (b < 100000) return 'Eligible Tiers: Nano, Micro & Mid (≤ 500K subscribers)';
+    return 'Eligible Tiers: All Tiers — Nano, Micro, Mid & Macro (500K+ subscribers)';
+  };
 
   const handleDeliverableToggle = (d) => {
     if (deliverables.includes(d)) {
@@ -43,74 +52,80 @@ const CreateCampaign = () => {
     }
   };
 
-  const handleAgeChange = (event, newValue) => {
-    setAgeRange(newValue);
-  };
-
-  const triggerAiPipeline = () => {
-    setLoading(true);
-    setLoadingStep(0);
-    
-    // Cycle through steps every 600ms
-    const interval = setInterval(() => {
-      setLoadingStep((prev) => {
-        if (prev >= loadingSteps.length - 1) {
-          clearInterval(interval);
-          saveAndRedirect();
-          return prev;
-        }
-        return prev + 1;
-      });
-    }, 700);
-  };
-
-  const saveAndRedirect = async () => {
-    try {
-      const newCamp = await campaignService.createCampaign({
-        name,
-        category,
-        budget,
-        description,
-        deliverables,
-        state,
-        audienceGender: gender,
-        audienceAgeRange: ageRange,
-        goal,
-        platform
-      });
-      
-      showToast('AI Recommendations generated successfully!', 'success');
-      setLoading(false);
-      
-      // Redirect to recommendations page, passing the campaign ID
-      navigate(`/company/recommendations?campaign=${newCamp.id}`);
-    } catch (err) {
-      showToast('Error saving campaign.', 'error');
-      setLoading(false);
-    }
-  };
-
-  const handleFormSubmit = (e) => {
+  const handleFormSubmit = async (e) => {
     e.preventDefault();
-    if (!name || !budget || !description) {
-      showToast('Please fill out all campaign core parameters.', 'error');
+    if (!name || !category || !campaignDescription || campaignDescription.trim().length < 10) {
+      showToast('Please provide a campaign name and a description of at least 10 characters.', 'error');
       return;
     }
-    triggerAiPipeline();
+    if (!budgetInr || Number(budgetInr) <= 0) {
+      showToast('Budget (INR) must be greater than 0.', 'error');
+      return;
+    }
+
+    setLoading(true);
+    setLoadingStep(0);
+
+    const stepTimer = setInterval(() => {
+      setLoadingStep((prev) => (prev < loadingSteps.length - 1 ? prev + 1 : prev));
+    }, 450);
+
+    try {
+      const payload = {
+        name: name.trim(),
+        category: category.toLowerCase(),
+        budget: Number(budgetInr),
+        budget_inr: Number(budgetInr),
+        description: campaignDescription.trim(),
+        campaign_description: campaignDescription.trim(),
+        target_country: targetCountry,
+        targetCountry,
+        state: targetCountry || 'India',
+        campaign_goal: campaignGoal,
+        campaignGoal,
+        goal: campaignGoal,
+        top_n: Number(topN) || 10,
+        topN: Number(topN) || 10,
+        strict_category: Boolean(strictCategory),
+        strictCategory: Boolean(strictCategory),
+        deliverables,
+        platform: 'YouTube'
+      };
+
+      const newCamp = await campaignService.createCampaign(payload);
+
+      // Immediately generate and store recommendations in history for this campaign
+      await recommendationService.getRecommendations({
+        ...payload,
+        id: newCamp.id,
+        campaignId: newCamp.id,
+        campaignName: newCamp.name
+      });
+
+      clearInterval(stepTimer);
+      setLoadingStep(loadingSteps.length - 1);
+      showToast('AI Recommendations generated and saved to history!', 'success');
+      setLoading(false);
+
+      navigate(`/company/recommendations?campaign=${newCamp.id}&autoload=true`);
+    } catch (err) {
+      clearInterval(stepTimer);
+      showToast('Error generating campaign recommendations.', 'error');
+      setLoading(false);
+    }
   };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', paddingBottom: '50px' }}>
       <PageHeader
-        title="Create YouTube Campaign"
-        subtitle="Configure target audience, parameters & budget to match with top YouTubers & channel creators."
+        title="Create AI YouTube Campaign"
+        subtitle="Configure your campaign brief, target region, and budget to discover top matching YouTube channels."
         icon={<Layout size={22} />}
       />
 
       <form onSubmit={handleFormSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '1.1fr 0.9fr', gap: '24px' }} className="form-split">
-          
-          {/* Left card: Campaign Core details */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1.15fr 0.85fr', gap: '24px' }} className="form-split">
+          {/* Left Card: Campaign Core & Description */}
           <div
             style={{
               backgroundColor: 'white',
@@ -120,78 +135,92 @@ const CreateCampaign = () => {
               boxShadow: 'var(--shadow-sm)',
               display: 'flex',
               flexDirection: 'column',
-              gap: '20px',
+              gap: '20px'
             }}
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', borderBottom: '1px solid var(--border-light)', paddingBottom: '12px' }}>
               <div style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: 'var(--primary-purple)' }} />
-              <h3 style={{ fontSize: '0.85rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--text-secondary)' }}>
-                Campaign Core Details
+              <h3 style={{ fontSize: '0.85rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--text-secondary)', margin: 0 }}>
+                Campaign Brief & Budget
               </h3>
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-              <label style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-primary)' }}>Campaign Name *</label>
+              <label style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                Campaign Name *
+              </label>
               <input
                 type="text"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 required
+                placeholder="e.g. Festive Fashion & Lifestyle Launch 2026"
                 style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid var(--border-color)', fontSize: '0.875rem' }}
               />
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-              <label style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-primary)' }}>Sponsorship Budget (₹) *</label>
-              <input
-                type="number"
-                value={budget}
-                onChange={(e) => setBudget(e.target.value)}
-                required
-                style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid var(--border-color)', fontSize: '0.875rem' }}
-              />
-              <span style={{ fontSize: '0.72rem', color: 'var(--text-light)' }}>Enter positive numeric budget value in INR</span>
-            </div>
-
-            {/* Age range slider */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '4px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem' }}>
-                <label style={{ fontWeight: 600, color: 'var(--text-primary)' }}>Target Viewer Age Range *</label>
-                <span style={{ color: 'var(--primary-purple)', fontWeight: 700 }}>
-                  {ageRange[0]} Years - {ageRange[1]} Years
-                </span>
-              </div>
-              <div style={{ padding: '0 10px' }}>
-                <Slider
-                  value={ageRange}
-                  onChange={handleAgeChange}
-                  valueLabelDisplay="auto"
-                  min={13}
-                  max={65}
-                />
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.72rem', color: 'var(--text-light)' }}>
-                <span>13 Years</span>
-                <span>65 Years</span>
-              </div>
-            </div>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-              <label style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-primary)' }}>Campaign & Deliverables Description *</label>
+              <label style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                Campaign Description *
+              </label>
               <textarea
                 rows={4}
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
+                value={campaignDescription}
+                onChange={(e) => setCampaignDescription(e.target.value)}
                 required
-                style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid var(--border-color)', fontSize: '0.875rem', fontFamily: 'var(--font-body)', resize: 'vertical' }}
+                minLength={10}
+                placeholder="Describe your product, target audience, and content style (minimum 10 characters)..."
+                style={{
+                  width: '100%',
+                  padding: '12px',
+                  borderRadius: '8px',
+                  border: '1px solid var(--border-color)',
+                  fontSize: '0.875rem',
+                  fontFamily: 'var(--font-body)',
+                  resize: 'vertical'
+                }}
               />
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <label style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                Campaign Budget in INR *
+              </label>
+              <input
+                type="number"
+                min={1000}
+                step={1000}
+                value={budgetInr}
+                onChange={(e) => setBudgetInr(e.target.value)}
+                required
+                style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid var(--border-color)', fontSize: '0.875rem' }}
+              />
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  fontSize: '0.75rem',
+                  color: 'var(--primary-purple)',
+                  fontWeight: 600,
+                  backgroundColor: 'rgba(124, 58, 237, 0.06)',
+                  padding: '8px 12px',
+                  borderRadius: '8px',
+                  marginTop: '2px'
+                }}
+              >
+                <Info size={14} />
+                <span>{getBudgetTierLabel(budgetInr)}</span>
+              </div>
             </div>
 
             {/* Deliverables checklist */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              <label style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-primary)' }}>Sponsorship Deliverables</label>
+              <label style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                Sponsorship Deliverables
+              </label>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
-                {['Dedicated Video', 'Integrated Sponsor Segment', 'Short/Reel', 'Story', 'Product Review'].map((d) => {
+                {['Dedicated Video', 'Integrated Sponsor Segment', 'YouTube Shorts', 'Product Review', 'Unboxing'].map((d) => {
                   const isChecked = deliverables.includes(d);
                   return (
                     <button
@@ -207,7 +236,7 @@ const CreateCampaign = () => {
                         fontSize: '0.78rem',
                         fontWeight: 600,
                         cursor: 'pointer',
-                        transition: 'all 0.2s',
+                        transition: 'all 0.2s'
                       }}
                     >
                       {d}
@@ -218,7 +247,7 @@ const CreateCampaign = () => {
             </div>
           </div>
 
-          {/* Right card: Channel Niche & target audience */}
+          {/* Right Card: Category, Goal & Ranking Parameters */}
           <div
             style={{
               backgroundColor: 'white',
@@ -228,117 +257,116 @@ const CreateCampaign = () => {
               boxShadow: 'var(--shadow-sm)',
               display: 'flex',
               flexDirection: 'column',
-              gap: '20px',
+              gap: '20px'
             }}
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', borderBottom: '1px solid var(--border-light)', paddingBottom: '12px' }}>
               <div style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: 'var(--accent-blue)' }} />
-              <h3 style={{ fontSize: '0.85rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--text-secondary)' }}>
-                Channel Niche & Location
+              <h3 style={{ fontSize: '0.85rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--text-secondary)', margin: 0 }}>
+                Category, Goal & Match Preferences
               </h3>
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-              <label style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-primary)' }}>Channel Niche / Category *</label>
+              <label style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                Channel Category *
+              </label>
               <select
                 value={category}
                 onChange={(e) => setCategory(e.target.value)}
                 style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid var(--border-color)', fontSize: '0.875rem', backgroundColor: 'white' }}
               >
-                <option value="Technology">Technology</option>
-                <option value="Fashion">Fashion & Lifestyle</option>
-                <option value="Gaming">Gaming</option>
-                <option value="Finance">Finance</option>
-                <option value="Fitness">Fitness</option>
-                <option value="Education">Education</option>
-                <option value="Lifestyle">Lifestyle</option>
-                <option value="Food">Food</option>
-                <option value="Travel">Travel</option>
+                {AI_ENGINE_CATEGORIES.map((cat) => (
+                  <option key={cat.value} value={cat.value}>
+                    {cat.label}
+                  </option>
+                ))}
               </select>
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-              <label style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-primary)' }}>Target Creator State / UT *</label>
+              <label style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                Campaign Goal *
+              </label>
               <select
-                value={state}
-                onChange={(e) => setState(e.target.value)}
+                value={campaignGoal}
+                onChange={(e) => setCampaignGoal(e.target.value)}
                 style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid var(--border-color)', fontSize: '0.875rem', backgroundColor: 'white' }}
               >
-                {INDIAN_STATES.map((s) => (
-                  <option key={s} value={s}>{s}</option>
+                {AI_CAMPAIGN_GOALS.map((g) => (
+                  <option key={g.value} value={g.value}>
+                    {g.label}
+                  </option>
                 ))}
               </select>
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-              <label style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-primary)' }}>Audience Gender *</label>
-              <div style={{ display: 'flex', backgroundColor: '#F1F5F9', padding: '4px', borderRadius: '10px' }}>
-                {['All', 'Male', 'Female'].map((g) => (
-                  <button
-                    key={g}
-                    type="button"
-                    onClick={() => setGender(g)}
-                    style={{
-                      flex: 1,
-                      border: 'none',
-                      padding: '10px',
-                      borderRadius: '8px',
-                      fontWeight: 600,
-                      fontSize: '0.8rem',
-                      cursor: 'pointer',
-                      backgroundColor: gender === g ? 'white' : 'transparent',
-                      color: gender === g ? 'var(--primary-purple)' : 'var(--text-secondary)',
-                      boxShadow: gender === g ? '0 2px 4px rgba(0,0,0,0.05)' : 'none',
-                      transition: 'all 0.2s',
-                    }}
-                  >
-                    {g}
-                  </button>
+              <label style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                Target Country
+              </label>
+              <select
+                value={targetCountry}
+                onChange={(e) => setTargetCountry(e.target.value)}
+                style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid var(--border-color)', fontSize: '0.875rem', backgroundColor: 'white' }}
+              >
+                {AI_TARGET_COUNTRIES.map((c) => (
+                  <option key={c.label} value={c.value}>
+                    {c.label}
+                  </option>
                 ))}
+              </select>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <label style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                  Number of Matches
+                </label>
+                <input
+                  type="number"
+                  min={1}
+                  max={50}
+                  value={topN}
+                  onChange={(e) => setTopN(e.target.value)}
+                  style={{ width: '100%', padding: '11px', borderRadius: '8px', border: '1px solid var(--border-color)', fontSize: '0.875rem' }}
+                />
+                <span style={{ fontSize: '0.7rem', color: 'var(--text-light)' }}>1 to 50 channels</span>
               </div>
-            </div>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-              <label style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-primary)' }}>Campaign Goal *</label>
-              <select
-                value={goal}
-                onChange={(e) => setGoal(e.target.value)}
-                style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid var(--border-color)', fontSize: '0.875rem', backgroundColor: 'white' }}
-              >
-                <option value="Brand Awareness">Brand Awareness</option>
-                <option value="Product Launch">Product Launch</option>
-                <option value="Lead Generation">Lead Generation</option>
-                <option value="Sales">Sales Promotion</option>
-                <option value="App Promotion">App Installs Promotion</option>
-                <option value="Product Review">Product Deep Review</option>
-              </select>
-            </div>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-              <label style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-primary)' }}>Primary Platform</label>
-              <div style={{ display: 'flex', backgroundColor: '#F1F5F9', padding: '4px', borderRadius: '10px' }}>
-                {['YouTube'].map((p) => (
-                  <button
-                    key={p}
-                    type="button"
-                    onClick={() => setPlatform(p)}
-                    style={{
-                      flex: 1,
-                      border: 'none',
-                      padding: '10px',
-                      borderRadius: '8px',
-                      fontWeight: 600,
-                      fontSize: '0.8rem',
-                      cursor: 'pointer',
-                      backgroundColor: platform === p ? 'white' : 'transparent',
-                      color: platform === p ? 'var(--primary-purple)' : 'var(--text-secondary)',
-                      boxShadow: platform === p ? '0 2px 4px rgba(0,0,0,0.05)' : 'none',
-                      transition: 'all 0.2s',
-                    }}
-                  >
-                    {p}
-                  </button>
-                ))}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <label style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                  Category Mode
+                </label>
+                <div style={{ display: 'flex', backgroundColor: '#F1F5F9', padding: '4px', borderRadius: '10px' }}>
+                  {[
+                    { label: 'Strict', val: true },
+                    { label: 'Broad', val: false }
+                  ].map((opt) => (
+                    <button
+                      key={opt.label}
+                      type="button"
+                      onClick={() => setStrictCategory(opt.val)}
+                      style={{
+                        flex: 1,
+                        border: 'none',
+                        padding: '8px',
+                        borderRadius: '8px',
+                        fontWeight: 600,
+                        fontSize: '0.78rem',
+                        cursor: 'pointer',
+                        backgroundColor: strictCategory === opt.val ? 'white' : 'transparent',
+                        color: strictCategory === opt.val ? 'var(--primary-purple)' : 'var(--text-secondary)',
+                        boxShadow: strictCategory === opt.val ? '0 2px 4px rgba(0,0,0,0.05)' : 'none'
+                      }}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+                <span style={{ fontSize: '0.7rem', color: 'var(--text-light)' }}>
+                  {strictCategory ? 'Exact category match only' : 'Include related categories'}
+                </span>
               </div>
             </div>
           </div>
@@ -357,15 +385,17 @@ const CreateCampaign = () => {
               display: 'flex',
               alignItems: 'center',
               gap: '8px',
+              cursor: 'pointer'
             }}
           >
-            <span>Generate AI Recommendations</span>
+            <Sparkles size={18} />
+            <span>Find AI Channel Matches</span>
             <ArrowRight size={18} />
           </button>
         </div>
       </form>
 
-      {/* AI recommendation Processing Loading Modal Overlay */}
+      {/* AI Recommendation Processing Modal */}
       {loading && (
         <div
           style={{
@@ -380,7 +410,7 @@ const CreateCampaign = () => {
             justifyContent: 'center',
             zIndex: 9999,
             backdropFilter: 'blur(4px)',
-            fontFamily: 'var(--font-body)',
+            fontFamily: 'var(--font-body)'
           }}
         >
           <div
@@ -388,18 +418,17 @@ const CreateCampaign = () => {
               backgroundColor: 'white',
               borderRadius: 'var(--border-radius-lg)',
               padding: '40px 32px',
-              maxWidth: '460px',
+              maxWidth: '480px',
               width: '90%',
               textAlign: 'center',
               boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)',
               display: 'flex',
               flexDirection: 'column',
               alignItems: 'center',
-              gap: '24px',
+              gap: '24px'
             }}
           >
-            {/* Spinning visual wrapper */}
-            <div style={{ position: 'relative', width: '80px', height: '80px' }}>
+            <div style={{ position: 'relative', width: '76px', height: '76px' }}>
               <div
                 style={{
                   width: '100%',
@@ -407,7 +436,7 @@ const CreateCampaign = () => {
                   borderRadius: '50%',
                   border: '6px solid var(--primary-light)',
                   borderTopColor: 'var(--primary-purple)',
-                  animation: 'spin 1s linear infinite',
+                  animation: 'spin 1s linear infinite'
                 }}
               />
               <span
@@ -416,7 +445,7 @@ const CreateCampaign = () => {
                   top: '50%',
                   left: '50%',
                   transform: 'translate(-50%, -50%)',
-                  fontSize: '24px',
+                  fontSize: '24px'
                 }}
               >
                 ✨
@@ -425,14 +454,13 @@ const CreateCampaign = () => {
 
             <div>
               <h3 style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '8px' }}>
-                AI Match Engine Active
+                Finding Matching YouTube Channels
               </h3>
-              <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', lineHeight: 1.4 }}>
-                Running recommendation pipeline. Reranking Indian creator nodes based on locations, budgets, and centrality scores.
+              <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', lineHeight: 1.4, margin: 0 }}>
+                Matching your campaign brief with verified YouTube creators and saving results to your history.
               </p>
             </div>
 
-            {/* Stepper items list */}
             <div
               style={{
                 width: '100%',
@@ -442,7 +470,7 @@ const CreateCampaign = () => {
                 display: 'flex',
                 flexDirection: 'column',
                 gap: '10px',
-                alignItems: 'flex-start',
+                alignItems: 'flex-start'
               }}
             >
               {loadingSteps.map((step, idx) => {
@@ -461,8 +489,7 @@ const CreateCampaign = () => {
                         ? 'var(--accent-green)'
                         : isCurrent
                         ? 'var(--primary-purple)'
-                        : 'var(--text-light)',
-                      transition: 'all 0.2s',
+                        : 'var(--text-light)'
                     }}
                   >
                     {isCompleted ? (
@@ -475,7 +502,7 @@ const CreateCampaign = () => {
                           border: '2px solid var(--primary-purple)',
                           borderTopColor: 'transparent',
                           borderRadius: '50%',
-                          animation: 'spin 0.6s linear infinite',
+                          animation: 'spin 0.6s linear infinite'
                         }}
                       />
                     ) : (

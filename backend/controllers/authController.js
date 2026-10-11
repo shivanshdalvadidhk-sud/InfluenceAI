@@ -1,11 +1,22 @@
+const { createClient } = require('@supabase/supabase-js');
 const supabase = require('../config/supabase');
 const { sendOTPEmail } = require('../services/emailService');
 
 // In-memory OTP storage: email.toLowerCase() -> { code: '123456', expiresAt: timestamp }
 const otpStore = new Map();
 
+// Create a stateless auth client so signInWithPassword never mutates the shared service-role client
+const createStatelessAuthClient = () =>
+  createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY, {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+      detectSessionInUrl: false
+    }
+  });
+
 // ======================================================
-// LOGIN USER
+// LOGIN USER (STRICT AUTHORIZATION FOR REGISTERED USERS ONLY)
 // ======================================================
 const loginUser = async (req, res) => {
   try {
@@ -18,77 +29,124 @@ const loginUser = async (req, res) => {
       });
     }
 
-    const targetAccountType = (role === 'Company' || role === 'brand') ? 'brand' : 'influencer';
+    const cleanEmail = String(email).trim().toLowerCase();
+    const targetAccountType = role === 'Company' || role === 'brand' ? 'brand' : 'influencer';
 
-    let authUserId = null;
-    try {
-      const { data: authData } = await supabase.auth.signInWithPassword({
-        email,
-        password
-      });
-      if (authData && authData.user) {
-        authUserId = authData.user.id;
-      }
-    } catch (e) {
-      console.warn('Supabase auth signIn warning:', e.message);
-    }
-
-    let detailsData = null;
-
-    if (targetAccountType === 'brand') {
-      let query = supabase.from('brands').select('*');
-      if (authUserId) {
-        query = query.eq('user_id', authUserId);
-      }
-      const { data: brands } = await query;
-      if (brands && brands.length > 0) {
-        detailsData = brands[0];
-      }
-    } else {
-      let query = supabase.from('influencers').select('*');
-      if (authUserId) {
-        query = query.eq('user_id', authUserId);
-      }
-      const { data: influencers } = await query;
-      if (influencers && influencers.length > 0) {
-        detailsData = influencers[0];
-      }
-    }
-
-    let responseUser = null;
-    if (targetAccountType === 'brand') {
-      responseUser = {
-        email: email,
-        role: 'Company',
-        name: detailsData?.company_name || detailsData?.brand_name || email.split('@')[0],
-        brandName: detailsData?.brand_name || detailsData?.company_name || 'Brand Partner',
-        industry: detailsData?.industry_category || 'General',
-        city: detailsData?.headquarters_city || 'India',
-        state: detailsData?.state_ut || 'Karnataka',
-        country: 'India',
-        website: detailsData?.brand_website || '',
-        userId: authUserId || detailsData?.user_id
-      };
-    } else {
-      responseUser = {
-        email: email,
-        role: 'Influencer',
-        name: detailsData?.full_name || detailsData?.creator_name || email.split('@')[0],
-        creatorName: detailsData?.creator_name || detailsData?.full_name || 'Creator',
-        handle: detailsData?.youtube_handle || '@creator',
-        category: detailsData?.content_niche_category || 'Technology',
-        state: detailsData?.state_ut || 'Karnataka',
-        country: 'India',
-        userId: authUserId || detailsData?.user_id
-      };
-    }
-
-    return res.status(200).json({
-      success: true,
-      message: 'Login successful',
-      user: responseUser
+    // 1. Verify email & password with Supabase Auth
+    const authClient = createStatelessAuthClient();
+    const { data: authData, error: authError } = await authClient.auth.signInWithPassword({
+      email: cleanEmail,
+      password: String(password)
     });
 
+    if (authError || !authData || !authData.user) {
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid email or password. Only registered users can sign in. Please sign up first.'
+      });
+    }
+
+    const authUserId = authData.user.id;
+    let detailsData = null;
+
+    // 2. Verify registered record exists for the selected role
+    if (targetAccountType === 'brand') {
+      const { data: byIdRows } = await supabase
+        .from('brands')
+        .select('*')
+        .eq('user_id', authUserId)
+        .limit(1);
+
+      if (byIdRows && byIdRows.length > 0) {
+        detailsData = byIdRows[0];
+      } else {
+        const { data: byEmailRows } = await supabase
+          .from('brands')
+          .select('*')
+          .ilike('email', cleanEmail)
+          .limit(1);
+        if (byEmailRows && byEmailRows.length > 0) {
+          detailsData = byEmailRows[0];
+        }
+      }
+
+      if (!detailsData) {
+        return res.status(403).json({
+          success: false,
+          message: 'No registered Brand/Company account found for this email. Please sign up as a Brand first.'
+        });
+      }
+
+      const responseUser = {
+        email: cleanEmail,
+        role: 'Company',
+        name: detailsData.company_name || detailsData.brand_name,
+        brandName: detailsData.brand_name || detailsData.company_name,
+        industry: detailsData.industry_category || 'General',
+        city: detailsData.headquarters_city || 'India',
+        state: detailsData.state_ut || 'India',
+        country: 'India',
+        website: detailsData.brand_website || '',
+        description: detailsData.description || '',
+        established: detailsData.established || '2026',
+        userId: detailsData.user_id || authUserId
+      };
+
+      return res.status(200).json({
+        success: true,
+        message: 'Login successful',
+        user: responseUser
+      });
+    } else {
+      const { data: byIdRows } = await supabase
+        .from('influencers')
+        .select('*')
+        .eq('user_id', authUserId)
+        .limit(1);
+
+      if (byIdRows && byIdRows.length > 0) {
+        detailsData = byIdRows[0];
+      } else {
+        const { data: byEmailRows } = await supabase
+          .from('influencers')
+          .select('*')
+          .ilike('email', cleanEmail)
+          .limit(1);
+        if (byEmailRows && byEmailRows.length > 0) {
+          detailsData = byEmailRows[0];
+        }
+      }
+
+      if (!detailsData) {
+        return res.status(403).json({
+          success: false,
+          message: 'No registered Influencer/Creator account found for this email. Please sign up as an Influencer first.'
+        });
+      }
+
+      const responseUser = {
+        email: cleanEmail,
+        role: 'Influencer',
+        name: detailsData.full_name || detailsData.creator_name,
+        creatorName: detailsData.creator_name || detailsData.full_name,
+        handle: detailsData.youtube_handle || '@creator',
+        category: detailsData.content_niche_category || 'General',
+        state: detailsData.state_ut || 'India',
+        country: 'India',
+        bio: detailsData.bio || '',
+        subscribers: Number(detailsData.subscribers || 0),
+        avgViews: Number(detailsData.avg_views || 0),
+        engagementRate: Number(detailsData.engagement_rate || 0),
+        avatar: detailsData.avatar || '',
+        userId: detailsData.user_id || authUserId
+      };
+
+      return res.status(200).json({
+        success: true,
+        message: 'Login successful',
+        user: responseUser
+      });
+    }
   } catch (error) {
     console.error('Login Controller Error:', error);
     return res.status(500).json({
@@ -114,33 +172,30 @@ const forgotPassword = async (req, res) => {
 
     const cleanEmail = String(email).trim().toLowerCase();
 
-    // 1. Generate secure 6-digit OTP code
+    // Verify user is registered before sending OTP
+    const { data: usersData } = await supabase.auth.admin.listUsers({ page: 1, perPage: 1000 });
+    const existingUser = usersData?.users?.find((u) => (u.email || '').toLowerCase() === cleanEmail);
+    if (!existingUser) {
+      return res.status(404).json({
+        success: false,
+        message: 'No registered account found with this email address.'
+      });
+    }
+
     const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
 
-    // 2. Save OTP code in memory store (10 minute expiry)
     otpStore.set(cleanEmail, {
       code: otpCode,
       expiresAt: Date.now() + 10 * 60 * 1000
     });
 
-    // 3. Send email to user inbox via Nodemailer / SMTP
     const emailResult = await sendOTPEmail(cleanEmail, otpCode);
-
-    // 4. Try Supabase Auth password reset trigger as secondary
-    try {
-      await supabase.auth.resetPasswordForEmail(cleanEmail, {
-        redirectTo: 'http://localhost:5173/reset-password'
-      });
-    } catch (e) {
-      console.warn("Supabase auth resetPasswordForEmail notice:", e.message);
-    }
 
     return res.status(200).json({
       success: true,
       message: `A 6-digit OTP code has been dispatched to ${cleanEmail}. Please check your inbox.`,
       emailResult
     });
-
   } catch (error) {
     console.error('forgotPassword error:', error);
     return res.status(500).json({
@@ -175,10 +230,6 @@ const verifyOTP = async (req, res) => {
     }
 
     let isVerified = false;
-    let authError = null;
-    let sessionData = null;
-
-    // Check stored in-memory OTP code
     const storedRecord = otpStore.get(cleanEmail);
     if (storedRecord) {
       if (Date.now() > storedRecord.expiresAt) {
@@ -191,61 +242,22 @@ const verifyOTP = async (req, res) => {
 
       if (storedRecord.code === cleanCode) {
         isVerified = true;
-        // Clean up OTP after single successful verification
         otpStore.delete(cleanEmail);
       }
-    }
-
-    // Secondary Check: Verify recovery OTP via Supabase Auth
-    if (!isVerified) {
-      try {
-        const { data, error } = await supabase.auth.verifyOtp({
-          email: cleanEmail,
-          token: cleanCode,
-          type: 'recovery'
-        });
-
-        if (data && data.user && data.session) {
-          isVerified = true;
-          sessionData = data.session;
-        } else if (error) {
-          const { data: data2 } = await supabase.auth.verifyOtp({
-            email: cleanEmail,
-            token: cleanCode,
-            type: 'email'
-          });
-          if (data2 && data2.user) {
-            isVerified = true;
-            sessionData = data2.session;
-          } else {
-            authError = error;
-          }
-        }
-      } catch (e) {
-        authError = e;
-      }
-    }
-
-    // Dev/Test Mode fallback verification for 123456
-    if (!isVerified && cleanCode === '123456') {
-      isVerified = true;
     }
 
     if (!isVerified) {
       return res.status(400).json({
         success: false,
-        message: authError?.message || 'Invalid 6-digit OTP code. Please check your email and try again.'
+        message: 'Invalid 6-digit OTP code. Please check your email and try again.'
       });
     }
 
     return res.status(200).json({
       success: true,
       message: 'OTP Code verified successfully!',
-      email: cleanEmail,
-      accessToken: sessionData?.access_token || null,
-      refreshToken: sessionData?.refresh_token || null
+      email: cleanEmail
     });
-
   } catch (error) {
     console.error('verifyOTP error:', error);
     return res.status(500).json({
@@ -261,68 +273,47 @@ const verifyOTP = async (req, res) => {
 const resetPassword = async (req, res) => {
   try {
     const { email, newPassword } = req.body;
-    const accessToken = req.headers.authorization?.startsWith('Bearer ')
-      ? req.headers.authorization.split(' ')[1]
-      : null;
 
-    if (!newPassword) {
-      return res.status(400).json({
-        success: false,
-        message: 'New password is required'
-      });
-    }
-
-    if (newPassword.length < 6) {
+    if (!newPassword || String(newPassword).length < 6) {
       return res.status(400).json({
         success: false,
         message: 'Password must contain at least 6 characters'
       });
     }
 
-    let updated = false;
-
-    // Method 1: Update via user session access token if present
-    if (accessToken) {
-      try {
-        const { createClient } = require('@supabase/supabase-js');
-        const userSupabase = createClient(
-          process.env.SUPABASE_URL,
-          process.env.SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1zaGxxcXN2aGRxaXhvb3NxYnNjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY1MTkxNTIsImV4cCI6MjEwMjA5NTE1Mn0.3n7pUpYt5sM5qPZ-2j-Sg8M3m6X3k4_1A-9p0L3Z9k8',
-          {
-            global: {
-              headers: {
-                Authorization: `Bearer ${accessToken}`
-              }
-            }
-          }
-        );
-        const { error: upErr } = await userSupabase.auth.updateUser({ password: newPassword });
-        if (!upErr) updated = true;
-      } catch (e) {
-        console.warn("Session token update notice:", e.message);
-      }
+    if (!email) {
+      return res.status(400).json({
+        success: false,
+        message: 'Email is required to reset password'
+      });
     }
 
-    // Method 2: Admin update by email fallback
-    if (!updated && email) {
-      try {
-        const { data: usersData } = await supabase.auth.admin.listUsers();
-        let targetUser = usersData?.users?.find((u) => u.email === email);
+    const cleanEmail = String(email).trim().toLowerCase();
+    const { data: usersData } = await supabase.auth.admin.listUsers({ page: 1, perPage: 1000 });
+    const targetUser = usersData?.users?.find((u) => (u.email || '').toLowerCase() === cleanEmail);
 
-        if (targetUser) {
-          const { error: adminErr } = await supabase.auth.admin.updateUserById(targetUser.id, { password: newPassword });
-          if (!adminErr) updated = true;
-        }
-      } catch (e) {
-        console.warn("Admin update password notice:", e.message);
-      }
+    if (!targetUser) {
+      return res.status(404).json({
+        success: false,
+        message: 'No registered user found with this email'
+      });
+    }
+
+    const { error: adminErr } = await supabase.auth.admin.updateUserById(targetUser.id, {
+      password: newPassword
+    });
+
+    if (adminErr) {
+      return res.status(400).json({
+        success: false,
+        message: adminErr.message
+      });
     }
 
     return res.status(200).json({
       success: true,
       message: 'Password updated successfully! You can now sign in with your new password.'
     });
-
   } catch (error) {
     console.error('resetPassword error:', error);
     return res.status(500).json({

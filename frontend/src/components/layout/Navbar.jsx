@@ -94,9 +94,10 @@ const Navbar = ({ onMenuToggle }) => {
 
   const getBreadcrumbs = () => {
     const paths = location.pathname.split('/').filter((x) => x);
-    if (paths.length === 0) return [{ name: 'Home', active: true }];
+    const dashboardPath = role === 'Company' ? '/company/dashboard' : '/influencer/dashboard';
+    if (paths.length === 0) return [{ name: 'Home', path: dashboardPath, active: true }];
 
-    const breadcrumbs = [{ name: 'Home', path: role === 'Company' ? '/company/dashboard' : '/influencer/dashboard' }];
+    const breadcrumbs = [{ name: 'Home', path: dashboardPath, active: false }];
 
     let currentPath = '';
     paths.forEach((p, idx) => {
@@ -105,7 +106,9 @@ const Navbar = ({ onMenuToggle }) => {
       let name = p.charAt(0).toUpperCase() + p.slice(1);
       if (name === 'Company') return;
       if (name === 'Influencer') return;
-      if (name === 'Campaigns') name = 'Campaign';
+      if (name === 'Campaigns') return;
+      if (name === 'Influencers') return;
+      if (name === 'Opportunities') return;
       if (name === 'Inquiries') name = 'Brand Inquiries';
 
       if (p.includes('-') || (idx === paths.length - 1 && !isNaN(p))) {
@@ -118,6 +121,10 @@ const Navbar = ({ onMenuToggle }) => {
         active: idx === paths.length - 1,
       });
     });
+
+    if (breadcrumbs.length === 1) {
+      breadcrumbs[0].active = true;
+    }
 
     return breadcrumbs;
   };
@@ -165,7 +172,7 @@ const Navbar = ({ onMenuToggle }) => {
 
         {/* Mobile Brand Name */}
         <div
-          onClick={() => navigate('/')}
+          onClick={() => navigate(role === 'Company' ? '/company/dashboard' : '/influencer/dashboard')}
           style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}
           className="navbar-mobile-brand"
         >

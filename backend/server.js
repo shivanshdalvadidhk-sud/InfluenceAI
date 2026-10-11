@@ -92,7 +92,35 @@ app.use((err, req, res, next) => {
 });
 
 const PORT = process.env.PORT || 5000;
+const path = require("path");
+const { spawn } = require("child_process");
+
+const ensureAiEngineRunning = async () => {
+  const aiHealthUrl = "http://127.0.0.1:8000/health";
+  try {
+    const res = await fetch(aiHealthUrl);
+    if (res.ok) {
+      console.log("AI Recommendation Engine already running on http://127.0.0.1:8000");
+      return;
+    }
+  } catch (_) {
+    // Not running yet, spawn it
+  }
+
+  const engineDir = path.resolve(__dirname, "../influencer_recommendation_engine_code");
+  console.log("Starting Python AI Recommendation Engine on http://127.0.0.1:8000...");
+  const aiProc = spawn("python", ["-m", "uvicorn", "app:app", "--host", "127.0.0.1", "--port", "8000"], {
+    cwd: engineDir,
+    stdio: "inherit",
+    shell: false
+  });
+
+  aiProc.on("error", (err) => {
+    console.warn("Could not auto-start Python AI Engine:", err.message);
+  });
+};
 
 app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
+  ensureAiEngineRunning();
 });

@@ -71,7 +71,7 @@ const Sidebar = ({ isMobileOpen, onClose }) => {
     { name: 'Dashboard', path: '/company/dashboard', icon: LayoutDashboard },
     { name: 'Create Campaign', path: '/company/campaigns/create', icon: PlusCircle },
     { name: 'Recommendations', path: '/company/recommendations', icon: Sparkles },
-    { name: 'Saved Influencers', path: '/company/saved', icon: Bookmark, badge: savedCount },
+    { name: 'Saved Influencers', path: '/company/saved', icon: Bookmark },
     { name: 'Campaign History', path: '/company/campaigns/history', icon: History },
     { name: 'Analytics', path: '/company/analytics', icon: BarChart3 },
     { name: 'Company Profile', path: '/company/profile', icon: User },
@@ -148,7 +148,7 @@ const Sidebar = ({ isMobileOpen, onClose }) => {
 
         {/* Brand Logo */}
         <div
-          onClick={() => handleNavClick('/')}
+          onClick={() => handleNavClick(role === 'Company' ? '/company/dashboard' : '/influencer/dashboard')}
           style={{
             display: 'flex',
             alignItems: 'center',

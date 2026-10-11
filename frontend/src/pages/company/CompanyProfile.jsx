@@ -3,7 +3,7 @@ import PageHeader from '../../components/layout/PageHeader';
 import { authService } from '../../services/authService';
 import { showToast } from '../../components/common/Toast';
 import { User, Building, Globe, Mail, Phone, MapPin, Save } from 'lucide-react';
-import { INDIAN_STATES } from '../../data/mockData';
+import { INDIAN_STATES, INDIAN_CITIES, INDIAN_CITIES_BY_STATE } from '../../data/mockData';
 
 const CompanyProfile = () => {
   const [currentUser, setCurrentUser] = useState(null);
@@ -17,8 +17,8 @@ const CompanyProfile = () => {
   const [website, setWebsite] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
-  const [city, setCity] = useState('');
-  const [state, setState] = useState('');
+  const [city, setCity] = useState('Bengaluru');
+  const [state, setState] = useState('Karnataka');
   const [country, setCountry] = useState('India');
 
   const [description, setDescription] = useState('');
@@ -39,8 +39,8 @@ const CompanyProfile = () => {
       setWebsite(user.website || '');
       setEmail(user.email || '');
       setPhone(user.phone || '+91 98765 43210');
-      setCity(user.city || '');
-      setState(user.state || '');
+      setCity(user.city || 'Bengaluru');
+      setState(user.state || 'Karnataka');
       setCountry(user.country || 'India');
       setDescription(user.description || '');
       
@@ -50,6 +50,27 @@ const CompanyProfile = () => {
       setX(user.socials?.x || '');
     }
   }, []);
+
+  const handleStateChange = (newState) => {
+    setState(newState);
+    const stateCities = INDIAN_CITIES_BY_STATE[newState] || [];
+    if (stateCities.length > 0 && !stateCities.includes(city)) {
+      setCity(stateCities[0]);
+    }
+  };
+
+  const handleCityChange = (newCity) => {
+    setCity(newCity);
+    const currentStateCities = INDIAN_CITIES_BY_STATE[state] || [];
+    if (!currentStateCities.includes(newCity)) {
+      const matchedState = Object.keys(INDIAN_CITIES_BY_STATE).find((st) =>
+        (INDIAN_CITIES_BY_STATE[st] || []).includes(newCity)
+      );
+      if (matchedState) {
+        setState(matchedState);
+      }
+    }
+  };
 
   const handleSave = (e) => {
     e.preventDefault();
@@ -76,6 +97,9 @@ const CompanyProfile = () => {
   };
 
   if (!currentUser) return null;
+
+  const stateCitiesList = INDIAN_CITIES_BY_STATE[state] || [];
+  const otherCitiesList = INDIAN_CITIES.filter((c) => !stateCitiesList.includes(c));
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', paddingBottom: '50px' }}>
@@ -124,6 +148,7 @@ const CompanyProfile = () => {
                   <option value="Gaming">Gaming & Hardware</option>
                   <option value="Finance">Finance & Investing</option>
                   <option value="Fitness">Fitness & Wellness</option>
+                  <option value="Travel">Travel & Tourism</option>
                 </select>
               </div>
             </div>
@@ -141,7 +166,7 @@ const CompanyProfile = () => {
             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
               <label style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Company Website</label>
               <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-                <input type="url" value={website} onChange={(e) => setWebsite(e.target.value)} style={{ width: '100%', padding: '10px 10px 10px 34px', borderRadius: '8px', border: '1px solid var(--border-color)', fontSize: '0.85rem' }} />
+                <input type="text" value={website} onChange={(e) => setWebsite(e.target.value)} style={{ width: '100%', padding: '10px 10px 10px 34px', borderRadius: '8px', border: '1px solid var(--border-color)', fontSize: '0.85rem' }} />
                 <Globe size={14} style={{ position: 'absolute', left: 12, color: 'var(--text-light)' }} />
               </div>
             </div>
@@ -166,13 +191,33 @@ const CompanyProfile = () => {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '16px' }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
               <label style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Headquarters City</label>
-              <input type="text" value={city} onChange={(e) => setCity(e.target.value)} style={{ padding: '10px', borderRadius: '8px', border: '1px solid var(--border-color)', fontSize: '0.85rem' }} />
+              <select
+                value={city}
+                onChange={(e) => handleCityChange(e.target.value)}
+                style={{ padding: '10px', borderRadius: '8px', border: '1px solid var(--border-color)', fontSize: '0.85rem', backgroundColor: 'white' }}
+              >
+                {city && !INDIAN_CITIES.includes(city) && (
+                  <option value={city}>{city}</option>
+                )}
+                {stateCitiesList.length > 0 && (
+                  <optgroup label={`${state} Cities`}>
+                    {stateCitiesList.map((c) => (
+                      <option key={`${state}-${c}`} value={c}>{c}</option>
+                    ))}
+                  </optgroup>
+                )}
+                <optgroup label="All Indian Cities">
+                  {otherCitiesList.map((c) => (
+                    <option key={`all-${c}`} value={c}>{c}</option>
+                  ))}
+                </optgroup>
+              </select>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
               <label style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)' }}>State</label>
               <select
                 value={state}
-                onChange={(e) => setState(e.target.value)}
+                onChange={(e) => handleStateChange(e.target.value)}
                 style={{ padding: '10px', borderRadius: '8px', border: '1px solid var(--border-color)', fontSize: '0.85rem', backgroundColor: 'white' }}
               >
                 {INDIAN_STATES.map((s) => (

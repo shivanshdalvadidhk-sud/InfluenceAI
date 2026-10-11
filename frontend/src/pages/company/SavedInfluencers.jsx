@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import PageHeader from '../../components/layout/PageHeader';
 import InfluencerCard from '../../components/cards/InfluencerCard';
 import { influencerService } from '../../services/influencerService';
+import { AI_ENGINE_CATEGORIES } from '../../services/recommendationService';
 import { showToast } from '../../components/common/Toast';
 import { Bookmark, Search } from 'lucide-react';
 
@@ -15,7 +16,6 @@ const SavedInfluencers = () => {
   // Filters
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('All Niches');
-  const [locationFilter, setLocationFilter] = useState('All Locations');
 
   const loadSaved = async () => {
     setLoading(true);
@@ -32,9 +32,11 @@ const SavedInfluencers = () => {
 
   useEffect(() => {
     loadSaved();
+    const handleSavedChanged = () => loadSaved();
+    window.addEventListener('influenceai_saved_changed', handleSavedChanged);
+    return () => window.removeEventListener('influenceai_saved_changed', handleSavedChanged);
   }, []);
 
-  // Filter effect
   useEffect(() => {
     let result = [...savedCreators];
 
@@ -42,35 +44,29 @@ const SavedInfluencers = () => {
       const q = searchTerm.toLowerCase();
       result = result.filter(
         (i) =>
-          i.name.toLowerCase().includes(q) ||
-          i.handle.toLowerCase().includes(q) ||
-          i.bio.toLowerCase().includes(q)
+          (i.channel_name || i.name || '').toLowerCase().includes(q) ||
+          (i.channel_url || '').toLowerCase().includes(q) ||
+          (i.category || '').toLowerCase().includes(q)
       );
     }
 
     if (categoryFilter !== 'All Niches') {
-      result = result.filter((i) => i.category.toLowerCase() === categoryFilter.toLowerCase());
-    }
-
-    if (locationFilter !== 'All Locations') {
-      result = result.filter((i) => i.state.toLowerCase() === locationFilter.toLowerCase());
+      result = result.filter((i) => (i.category || '').toLowerCase() === categoryFilter.toLowerCase());
     }
 
     setFilteredCreators(result);
-  }, [searchTerm, categoryFilter, locationFilter, savedCreators]);
+  }, [searchTerm, categoryFilter, savedCreators]);
 
   const handleRemove = (id) => {
-    // Refresh creator arrays
-    setSavedCreators(savedCreators.filter((c) => c.id !== id));
+    setSavedCreators((prev) => prev.filter((c) => (c.channel_id || c.id) !== id));
     showToast('Bookmark removed.', 'info');
   };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', paddingBottom: '50px' }}>
-      
       <PageHeader
-        title="Saved Influencers"
-        subtitle="Keep track of creators you bookmarked for current or future campaigns."
+        title="Saved YouTube Channels"
+        subtitle="Keep track of recommended YouTube channels you bookmarked for current or future campaigns."
         icon={<Bookmark size={22} />}
       />
 
@@ -85,13 +81,13 @@ const SavedInfluencers = () => {
             boxShadow: 'var(--shadow-sm)',
             display: 'flex',
             gap: '12px',
-            flexWrap: 'wrap',
+            flexWrap: 'wrap'
           }}
         >
           <div style={{ position: 'relative', flexGrow: 1, minWidth: '220px' }}>
             <input
               type="text"
-              placeholder="Search saved creators..."
+              placeholder="Search saved channels..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               style={{
@@ -100,7 +96,7 @@ const SavedInfluencers = () => {
                 borderRadius: '8px',
                 border: '1px solid var(--border-color)',
                 fontSize: '0.85rem',
-                outline: 'none',
+                outline: 'none'
               }}
             />
             <Search size={16} style={{ position: 'absolute', left: 12, top: 12, color: 'var(--text-light)' }} />
@@ -109,29 +105,14 @@ const SavedInfluencers = () => {
           <select
             value={categoryFilter}
             onChange={(e) => setCategoryFilter(e.target.value)}
-            style={{ padding: '10px', borderRadius: '8px', border: '1px solid var(--border-color)', fontSize: '0.85rem', minWidth: '130px', backgroundColor: 'white' }}
+            style={{ padding: '10px', borderRadius: '8px', border: '1px solid var(--border-color)', fontSize: '0.85rem', minWidth: '150px', backgroundColor: 'white' }}
           >
-            <option value="All Niches">All Niches</option>
-            <option value="Technology">Technology</option>
-            <option value="Fashion">Fashion</option>
-            <option value="Gaming">Gaming</option>
-            <option value="Finance">Finance</option>
-            <option value="Fitness">Fitness</option>
-            <option value="Education">Education</option>
-          </select>
-
-          <select
-            value={locationFilter}
-            onChange={(e) => setLocationFilter(e.target.value)}
-            style={{ padding: '10px', borderRadius: '8px', border: '1px solid var(--border-color)', fontSize: '0.85rem', minWidth: '140px', backgroundColor: 'white' }}
-          >
-            <option value="All Locations">All Locations</option>
-            <option value="Karnataka">Karnataka</option>
-            <option value="Maharashtra">Maharashtra</option>
-            <option value="Delhi">Delhi NCR</option>
-            <option value="Gujarat">Gujarat</option>
-            <option value="Tamil Nadu">Tamil Nadu</option>
-            <option value="West Bengal">West Bengal</option>
+            <option value="All Niches">All Categories</option>
+            {AI_ENGINE_CATEGORIES.map((c) => (
+              <option key={c.value} value={c.value}>
+                {c.label}
+              </option>
+            ))}
           </select>
         </div>
       )}
@@ -139,20 +120,30 @@ const SavedInfluencers = () => {
       {/* Bookmarks Grid */}
       {loading ? (
         <div style={{ textAlign: 'center', padding: '60px 0' }}>
-          <div style={{ width: '40px', height: '40px', border: '4px solid var(--primary-light)', borderTopColor: 'var(--primary-purple)', borderRadius: '50%', animation: 'spin 0.8s linear infinite', margin: '0 auto 16px auto' }} />
-          <span>Loading bookmarked creators...</span>
+          <div
+            style={{
+              width: '40px',
+              height: '40px',
+              border: '4px solid var(--primary-light)',
+              borderTopColor: 'var(--primary-purple)',
+              borderRadius: '50%',
+              animation: 'spin 0.8s linear infinite',
+              margin: '0 auto 16px auto'
+            }}
+          />
+          <span>Loading bookmarked YouTube channels...</span>
         </div>
       ) : filteredCreators.length > 0 ? (
         <div
           style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))',
-            gap: '24px',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))',
+            gap: '24px'
           }}
         >
-          {filteredCreators.map((creator) => (
+          {filteredCreators.map((creator, idx) => (
             <InfluencerCard
-              key={creator.id}
+              key={creator.channel_id || creator.id || idx}
               influencer={creator}
               showCampaignContext={true}
               onRemove={handleRemove}
@@ -173,7 +164,7 @@ const SavedInfluencers = () => {
             alignItems: 'center',
             gap: '16px',
             maxWidth: '460px',
-            margin: '40px auto 0 auto',
+            margin: '40px auto 0 auto'
           }}
         >
           <div
@@ -186,17 +177,17 @@ const SavedInfluencers = () => {
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              fontSize: '28px',
+              fontSize: '28px'
             }}
           >
             🔖
           </div>
           <div>
             <h3 style={{ fontSize: '1.2rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '8px' }}>
-              No saved influencers yet
+              No saved channels yet
             </h3>
             <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', lineHeight: 1.4 }}>
-              Bookmark creators from the recommendations tab to keep track of candidate profiles here.
+              Bookmark YouTube channels from the AI Recommendations tab to keep track of candidate profiles here.
             </p>
           </div>
           <button
@@ -207,13 +198,13 @@ const SavedInfluencers = () => {
               borderRadius: '10px',
               fontWeight: 600,
               fontSize: '0.85rem',
+              cursor: 'pointer'
             }}
           >
-            Explore Recommendations
+            Explore AI Recommendations
           </button>
         </div>
       )}
-
     </div>
   );
 };

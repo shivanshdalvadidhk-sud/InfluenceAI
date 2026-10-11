@@ -1,5 +1,4 @@
 import api from './api';
-import { supabase } from '../config/supabase';
 
 export const authService = {
   login: async (email, password, role) => {
@@ -7,128 +6,23 @@ export const authService = {
       const response = await api.post('/auth/login', { email, password, role });
       if (response.data && response.data.success && response.data.user) {
         const user = response.data.user;
+        // Clear any legacy unscoped mock caches on fresh login
+        localStorage.removeItem('influenceai_campaigns');
+        localStorage.removeItem('influenceai_rec_history');
+        localStorage.removeItem('influenceai_saved');
+        localStorage.removeItem('influenceai_inquiries');
+
         localStorage.setItem('influenceai_user', JSON.stringify(user));
         localStorage.setItem('influenceai_role', user.role || role);
         return user;
       }
+      throw new Error(response.data?.message || 'Authentication failed. Please register an account first.');
     } catch (err) {
       if (err.response && err.response.data && err.response.data.message) {
         throw new Error(err.response.data.message);
       }
-      console.warn("Backend login API unavailable, using local mock login fallback:", err.message);
+      throw new Error(err.message || 'Unable to sign in. Please verify your credentials or register an account.');
     }
-
-    let user = null;
-    if (role === 'Company') {
-      user = {
-        email: email,
-        role: 'Company',
-        name: 'Aura Lifestyle',
-        brandName: 'Aura Lifestyle',
-        industry: 'Fashion & Retail',
-        avatar: 'https://images.unsplash.com/photo-1577219491135-ce391730fb2c?w=100',
-        city: 'Mumbai',
-        state: 'Maharashtra',
-        country: 'India',
-        website: 'https://auralifestyle.in',
-        description: 'D2C sustainable fashion brand specializing in luxury ethnic wear.',
-        socials: { instagram: '@auralifestyle', youtube: '@aura_fashion', linkedin: 'Aura Lifestyle India', x: '@auralifestyle' },
-        established: '2021',
-        userId: 'a0000000-0000-0000-0000-000000000001'
-      };
-    } else {
-      user = {
-        email: email,
-        role: 'Influencer',
-        name: 'Rohan Mehta',
-        creatorName: 'Rohan Mehta',
-        handle: '@techwithrohan',
-        primaryPlatform: 'YouTube',
-        category: 'Technology',
-        avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100',
-        city: 'Bengaluru',
-        state: 'Karnataka',
-        country: 'India',
-        language: 'Hindi/English',
-        bio: 'Deep-dive smartphone reviews, AI gadgets & PC builds.',
-        subscribers: 1850000,
-        avgViews: 420000,
-        engagementRate: 4.8,
-        priceRates: { starting: 50000, dedicated: 184800, integrated: 95000, short: 40000 },
-        userId: 'a0000000-0000-0000-0000-000000000002'
-      };
-    }
-
-    localStorage.setItem('influenceai_user', JSON.stringify(user));
-    localStorage.setItem('influenceai_role', role);
-    return user;
-  },
-
-  loginWithGoogle: async (role, selectedAccount = null) => {
-    if (selectedAccount?.useOAuthRedirect) {
-      try {
-        const { error } = await supabase.auth.signInWithOAuth({
-          provider: 'google',
-          options: {
-            redirectTo: `${window.location.origin}/login`
-          }
-        });
-        if (error) console.warn("Supabase Google OAuth redirect warning:", error.message);
-      } catch (e) {
-        console.warn("Supabase Google OAuth exception:", e.message);
-      }
-    }
-
-    const email = selectedAccount?.email || (role === 'Company' ? 'brand.google@gmail.com' : 'creator.google@gmail.com');
-    const name = selectedAccount?.name || (role === 'Company' ? 'Google Brand Partner' : 'Google Creator');
-    const avatar = selectedAccount?.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100';
-
-    let user = null;
-    if (role === 'Company') {
-      user = {
-        email,
-        role: 'Company',
-        name,
-        brandName: name,
-        industry: 'Technology',
-        avatar,
-        city: 'Bengaluru',
-        state: 'Karnataka',
-        country: 'India',
-        website: 'https://google.com',
-        description: 'Brand Partner account authenticated via Google OAuth.',
-        socials: { instagram: '@google', youtube: '@google', linkedin: 'Google Inc.', x: '@google' },
-        established: '2026',
-        authProvider: 'google',
-        userId: selectedAccount?.id || `google-${Date.now()}`
-      };
-    } else {
-      user = {
-        email,
-        role: 'Influencer',
-        name,
-        creatorName: name,
-        handle: `@${email.split('@')[0]}`,
-        primaryPlatform: 'YouTube',
-        category: 'Technology',
-        avatar,
-        city: 'Bengaluru',
-        state: 'Karnataka',
-        country: 'India',
-        language: 'English',
-        bio: 'Verified content creator authenticated via Google OAuth.',
-        subscribers: 350000,
-        avgViews: 82000,
-        engagementRate: 5.4,
-        priceRates: { starting: 20000, dedicated: 60000, integrated: 35000, short: 15000 },
-        authProvider: 'google',
-        userId: selectedAccount?.id || `google-${Date.now()}`
-      };
-    }
-
-    localStorage.setItem('influenceai_user', JSON.stringify(user));
-    localStorage.setItem('influenceai_role', role);
-    return user;
   },
 
   forgotPassword: async (email) => {
@@ -137,12 +31,13 @@ export const authService = {
       if (response.data && response.data.success) {
         return response.data.message;
       }
+      throw new Error(response.data?.message || 'Failed to send OTP.');
     } catch (err) {
       if (err.response && err.response.data && err.response.data.message) {
         throw new Error(err.response.data.message);
       }
+      throw err;
     }
-    return '6-Digit OTP security code sent to your email!';
   },
 
   verifyOTP: async (email, otpCode) => {
@@ -151,12 +46,13 @@ export const authService = {
       if (response.data && response.data.success) {
         return response.data.message;
       }
+      throw new Error(response.data?.message || 'OTP verification failed.');
     } catch (err) {
       if (err.response && err.response.data && err.response.data.message) {
         throw new Error(err.response.data.message);
       }
+      throw err;
     }
-    return 'OTP verified successfully!';
   },
 
   resetPassword: async (email, newPassword) => {
@@ -165,128 +61,162 @@ export const authService = {
       if (response.data && response.data.success) {
         return response.data.message;
       }
+      throw new Error(response.data?.message || 'Password reset failed.');
     } catch (err) {
       if (err.response && err.response.data && err.response.data.message) {
         throw new Error(err.response.data.message);
       }
+      throw err;
     }
-    return 'Password updated successfully!';
   },
 
   registerCompany: async (formData) => {
+    const cleanEmail = String(formData.email || '').trim().toLowerCase();
+    const currentUser = authService.getCurrentUser();
+    if (currentUser && currentUser.email && currentUser.email.trim().toLowerCase() === cleanEmail) {
+      throw new Error('This email is already logged in and registered. Signup denied — please use a different email address.');
+    }
+
     const payload = {
       companyName: formData.companyName,
       brandName: formData.brandName || formData.companyName,
       industryCategory: formData.industry || 'Fashion',
       brandWebsite: formData.website || '',
-      headquartersCity: formData.city || 'Mumbai',
-      stateUT: formData.state || 'Maharashtra',
-      businessEmail: formData.email,
-      password: formData.password || 'password123',
+      headquartersCity: formData.city || 'Bengaluru',
+      stateUT: formData.state || 'Karnataka',
+      businessEmail: cleanEmail,
+      password: formData.password,
       termsAccepted: true
     };
 
-    let userId = null;
     try {
       const response = await api.post('/register/brand', payload);
-
-      if (response.data && response.data.success) {
-        userId = response.data.userId;
-      } else {
-        throw new Error(response.data?.message || 'Brand registration failed');
+      if (!response.data || !response.data.success || !response.data.userId) {
+        throw new Error(response.data?.message || 'Brand registration failed.');
       }
+
+      const userId = response.data.userId;
+      const user = {
+        email: cleanEmail,
+        role: 'Company',
+        name: formData.companyName,
+        brandName: formData.brandName || formData.companyName,
+        industry: formData.industry || 'Fashion',
+        avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(formData.brandName || formData.companyName)}&background=6366f1&color=fff&size=200`,
+        city: formData.city || 'Bengaluru',
+        state: formData.state || 'Karnataka',
+        country: formData.country || 'India',
+        website: formData.website || '',
+        description: `${formData.brandName || formData.companyName} (${formData.industry || 'Brand'})`,
+        socials: { instagram: '', youtube: '', linkedin: '', x: '' },
+        established: new Date().getFullYear().toString(),
+        userId
+      };
+
+      localStorage.removeItem('influenceai_campaigns');
+      localStorage.removeItem('influenceai_rec_history');
+      localStorage.removeItem('influenceai_saved');
+      localStorage.removeItem('influenceai_inquiries');
+
+      localStorage.setItem('influenceai_user', JSON.stringify(user));
+      localStorage.setItem('influenceai_role', 'Company');
+      return user;
     } catch (err) {
       if (err.response && err.response.data && err.response.data.message) {
         throw new Error(err.response.data.message);
       }
-
-      console.warn("Backend registration API unavailable, creating local session:", err.message);
+      throw new Error(err.message || 'Registration failed. Please try again.');
     }
-
-    const user = {
-      email: formData.email,
-      role: 'Company',
-      name: formData.companyName,
-      brandName: formData.brandName || formData.companyName,
-      industry: formData.industry || 'Fashion',
-      avatar: 'https://images.unsplash.com/photo-1577219491135-ce391730fb2c?w=100',
-      city: formData.city || 'Mumbai',
-      state: formData.state || 'Maharashtra',
-      country: formData.country || 'India',
-      website: formData.website || '',
-      description: 'Newly registered Brand Partner.',
-      socials: { instagram: '', youtube: '', linkedin: '', x: '' },
-      established: '2026',
-      userId: userId
-    };
-
-    localStorage.setItem('influenceai_user', JSON.stringify(user));
-    localStorage.setItem('influenceai_role', 'Company');
-    return user;
   },
 
   registerInfluencer: async (formData) => {
+    const cleanEmail = String(formData.email || '').trim().toLowerCase();
+    const currentUser = authService.getCurrentUser();
+    if (currentUser && currentUser.email && currentUser.email.trim().toLowerCase() === cleanEmail) {
+      throw new Error('This email is already logged in and registered. Signup denied — please use a different email address.');
+    }
+
     const payload = {
       fullName: formData.fullName,
       creatorName: formData.creatorName || formData.fullName,
       youtubeHandle: formData.channelHandle || '@creator',
       contentNicheCategory: formData.category || 'Technology',
       stateUT: formData.state || 'Karnataka',
-      businessEmail: formData.email,
-      password: formData.password || 'password123',
+      businessEmail: cleanEmail,
+      password: formData.password,
       termsAccepted: true
     };
 
-    let userId = null;
     try {
       const response = await api.post('/register/influencer', payload);
-
-      if (response.data && response.data.success) {
-        userId = response.data.userId;
-      } else {
-        throw new Error(response.data?.message || 'Influencer registration failed');
+      if (!response.data || !response.data.success || !response.data.userId) {
+        throw new Error(response.data?.message || 'Influencer registration failed.');
       }
+
+      const userId = response.data.userId;
+      const user = {
+        email: cleanEmail,
+        role: 'Influencer',
+        name: formData.fullName,
+        creatorName: formData.creatorName || formData.fullName,
+        handle: formData.channelHandle || '@creator',
+        primaryPlatform: formData.primaryPlatform || 'YouTube',
+        category: formData.category || 'Technology',
+        avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(formData.creatorName || formData.fullName)}&background=6366f1&color=fff&size=200`,
+        city: formData.city || '',
+        state: formData.state || 'Karnataka',
+        country: 'India',
+        language: formData.language || 'English & Hindi',
+        bio: '',
+        subscribers: 0,
+        avgViews: 0,
+        engagementRate: 0,
+        priceRates: { starting: 0, dedicated: 0, integrated: 0, short: 0 },
+        userId
+      };
+
+      localStorage.removeItem('influenceai_campaigns');
+      localStorage.removeItem('influenceai_rec_history');
+      localStorage.removeItem('influenceai_saved');
+      localStorage.removeItem('influenceai_inquiries');
+
+      localStorage.setItem('influenceai_user', JSON.stringify(user));
+      localStorage.setItem('influenceai_role', 'Influencer');
+      return user;
     } catch (err) {
       if (err.response && err.response.data && err.response.data.message) {
         throw new Error(err.response.data.message);
       }
-
-      console.warn("Backend registration API unavailable, creating local session:", err.message);
+      throw new Error(err.message || 'Registration failed. Please try again.');
     }
-
-    const user = {
-      email: formData.email,
-      role: 'Influencer',
-      name: formData.fullName,
-      creatorName: formData.creatorName || formData.fullName,
-      handle: formData.channelHandle || '@newcreator',
-      primaryPlatform: formData.primaryPlatform || 'YouTube',
-      category: formData.category || 'Technology',
-      avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100',
-      city: formData.city || 'Bengaluru',
-      state: formData.state || 'Karnataka',
-      country: 'India',
-      language: formData.language || 'Hindi/English',
-      bio: 'Professional social media content creator.',
-      subscribers: 50000,
-      avgViews: 12000,
-      engagementRate: 5.0,
-      priceRates: { starting: 10000, dedicated: 25000, integrated: 15000, short: 8000 },
-      userId: userId
-    };
-
-    localStorage.setItem('influenceai_user', JSON.stringify(user));
-    localStorage.setItem('influenceai_role', 'Influencer');
-    return user;
   },
 
   getCurrentUser: () => {
-    const userStr = localStorage.getItem('influenceai_user');
-    return userStr ? JSON.parse(userStr) : null;
+    try {
+      const userStr = localStorage.getItem('influenceai_user');
+      if (!userStr) return null;
+      const parsed = JSON.parse(userStr);
+      // Reject old hardcoded mock user IDs so stale browser storage forces a clean login
+      if (
+        !parsed.userId ||
+        parsed.userId === 'a0000000-0000-0000-0000-000000000001' ||
+        parsed.userId === 'a0000000-0000-0000-0000-000000000002' ||
+        String(parsed.userId).startsWith('google-')
+      ) {
+        localStorage.removeItem('influenceai_user');
+        localStorage.removeItem('influenceai_role');
+        return null;
+      }
+      return parsed;
+    } catch (_) {
+      return null;
+    }
   },
 
   getCurrentRole: () => {
-    return localStorage.getItem('influenceai_role');
+    const user = authService.getCurrentUser();
+    if (!user) return null;
+    return localStorage.getItem('influenceai_role') || user.role;
   },
 
   updateProfile: (updatedUser) => {
@@ -297,9 +227,13 @@ export const authService = {
   logout: () => {
     localStorage.removeItem('influenceai_user');
     localStorage.removeItem('influenceai_role');
+    localStorage.removeItem('influenceai_campaigns');
+    localStorage.removeItem('influenceai_rec_history');
+    localStorage.removeItem('influenceai_saved');
+    localStorage.removeItem('influenceai_inquiries');
   },
 
   isAuthenticated: () => {
-    return localStorage.getItem('influenceai_user') !== null;
+    return authService.getCurrentUser() !== null;
   }
 };

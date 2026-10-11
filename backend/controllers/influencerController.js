@@ -1,40 +1,182 @@
 const supabase = require('../config/supabase');
+const { formatChannelRecommendation } = require('./recommendationController');
 
-// Get all influencers
+// Helper to map a row from public.ml_channels into a unified influencer object
+function mapMlChannelToInfluencer(ch, aiRecOverride = null) {
+  const rec = aiRecOverride || {
+    rank: 1,
+    channel_id: ch.channel_id,
+    channel_name: ch.title || ch.channel_id,
+    channel_url: ch.channel_url || `https://www.youtube.com/channel/${ch.channel_id}`,
+    thumbnail_url: ch.thumbnail_url,
+    category: ch.category,
+    country: ch.country,
+    tier: ch.tier || 'micro',
+    subscriber_count: ch.subscriber_count,
+    view_count: ch.view_count,
+    engagement_rate: Number(ch.avg_engagement_rate || 0.045),
+    semantic_similarity: 0.78,
+    engagement_score: 0.75,
+    recommendation_score: 0.77,
+    budget_fit: 'not_verified - creator fee data unavailable',
+    reasons: ['Strong campaign-content match', 'Strong relative engagement']
+  };
+  return formatChannelRecommendation(rec, ch);
+}
+
+// Get all influencers (combines top ml_channels and registered public.influencers)
 const getInfluencers = async (req, res) => {
   try {
-    const { data: influencers, error } = await supabase
-      .from('influencers')
-      .select('*')
-      .order('created_at', { ascending: false });
+    const { category, limit = 60 } = req.query;
 
-    if (error) {
-      console.warn("getInfluencers error:", error.message);
-      return res.status(200).json({ success: true, influencers: [] });
+    let mlQuery = supabase
+      .from('ml_channels')
+      .select('channel_id, title, description, channel_url, thumbnail_url, category, country, tier, subscriber_count, view_count, avg_engagement_rate, video_count')
+      .not('subscriber_count', 'is', null)
+      .order('subscriber_count', { ascending: false })
+      .limit(Number(limit) || 60);
+
+    if (category && category !== 'All' && category !== 'All Niches') {
+      mlQuery = mlQuery.ilike('category', String(category));
     }
 
-    return res.status(200).json({ success: true, influencers: influencers || [] });
+    const [{ data: mlChannels }, { data: dbInfluencers }] = await Promise.all([
+      mlQuery,
+      supabase.from('influencers').select('*').order('created_at', { ascending: false })
+    ]);
+
+    const mappedMl = (mlChannels || []).map((ch) => mapMlChannelToInfluencer(ch));
+    const mappedDb = (dbInfluencers || []).map((inf) => ({
+      id: inf.id.toString(),
+      channel_id: inf.id.toString(),
+      name: inf.full_name,
+      channel_name: inf.creator_name || inf.full_name,
+      creatorName: inf.creator_name,
+      handle: inf.youtube_handle,
+      category: inf.content_niche_category,
+      country: 'IN',
+      state: inf.state_ut,
+      tier: (inf.subscribers || 50000) >= 1000000 ? 'macro' : (inf.subscribers || 50000) >= 100000 ? 'mid' : (inf.subscribers || 50000) >= 10000 ? 'micro' : 'nano',
+      bio: inf.bio || 'Verified content creator.',
+      platform: inf.primary_platform || 'YouTube',
+      primaryPlatform: inf.primary_platform || 'YouTube',
+      subscribers: Number(inf.subscribers || 50000),
+      subscriber_count: Number(inf.subscribers || 50000),
+      avgViews: Number(inf.avg_views || 15000),
+      view_count: Number(inf.avg_views || 15000),
+      engagementRate: Number(inf.engagement_rate || 4.8),
+      engagement_rate: Number(inf.engagement_rate || 4.8) / 100,
+      graphScore: Number(inf.graph_score || 85),
+      finalScore: Number(inf.graph_score || 85),
+      recommendation_score: Number(inf.graph_score || 85) / 100,
+      semantic_similarity: 0.85,
+      engagement_score: 0.82,
+      budget_fit: 'verified',
+      reasons: ['Verified platform creator'],
+      estimatedCost: Number(inf.estimated_cost || 95000),
+      avatar: inf.avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100',
+      thumbnail_url: inf.avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100',
+      profileUrl: `https://www.youtube.com/${String(inf.youtube_handle || '').startsWith('@') ? inf.youtube_handle : '@' + (inf.youtube_handle || 'youtube')}`,
+      channel_url: `https://www.youtube.com/${String(inf.youtube_handle || '').startsWith('@') ? inf.youtube_handle : '@' + (inf.youtube_handle || 'youtube')}`
+    }));
+
+    return res.status(200).json({
+      success: true,
+      influencers: [...mappedMl, ...mappedDb]
+    });
   } catch (err) {
     console.error("getInfluencers catch error:", err);
     return res.status(500).json({ success: false, message: "Internal server error" });
   }
 };
 
-// Get single influencer by ID
+// Get single influencer by ID (supports both ml_data.channels channel_id and public.influencers id)
 const getInfluencerById = async (req, res) => {
   try {
     const { id } = req.params;
-    const { data: influencer, error } = await supabase
-      .from('influencers')
-      .select('*')
-      .eq('id', id)
-      .single();
 
-    if (error || !influencer) {
-      return res.status(404).json({ success: false, message: "Influencer not found" });
+    // 1. Check ml_channels by channel_id first
+    const { data: mlChannel } = await supabase
+      .from('ml_channels')
+      .select('*')
+      .eq('channel_id', id)
+      .maybeSingle();
+
+    if (mlChannel) {
+      // Check if this channel appears in recent recommendation_history to preserve exact AI scores
+      let matchedRec = null;
+      const { data: recentHistory } = await supabase
+        .from('recommendation_history')
+        .select('recommendations')
+        .order('created_at', { ascending: false })
+        .limit(15);
+
+      if (recentHistory) {
+        for (const row of recentHistory) {
+          const recs = typeof row.recommendations === 'string'
+            ? JSON.parse(row.recommendations)
+            : (row.recommendations || []);
+          const found = recs.find((r) => (r.channel_id || r.id) === id);
+          if (found) {
+            matchedRec = found;
+            break;
+          }
+        }
+      }
+
+      const formatted = mapMlChannelToInfluencer(mlChannel, matchedRec);
+      return res.status(200).json({ success: true, influencer: formatted });
     }
 
-    return res.status(200).json({ success: true, influencer });
+    // 2. Otherwise check public.influencers if numeric ID
+    if (/^\d+$/.test(String(id))) {
+      const { data: influencer, error } = await supabase
+        .from('influencers')
+        .select('*')
+        .eq('id', Number(id))
+        .maybeSingle();
+
+      if (!error && influencer) {
+        return res.status(200).json({
+          success: true,
+          influencer: {
+            id: influencer.id.toString(),
+            channel_id: influencer.id.toString(),
+            name: influencer.full_name,
+            channel_name: influencer.creator_name || influencer.full_name,
+            creatorName: influencer.creator_name,
+            handle: influencer.youtube_handle,
+            category: influencer.content_niche_category,
+            country: 'IN',
+            state: influencer.state_ut,
+            tier: (influencer.subscribers || 50000) >= 1000000 ? 'macro' : 'mid',
+            bio: influencer.bio || 'Verified content creator.',
+            platform: influencer.primary_platform || 'YouTube',
+            primaryPlatform: influencer.primary_platform || 'YouTube',
+            subscribers: Number(influencer.subscribers || 50000),
+            subscriber_count: Number(influencer.subscribers || 50000),
+            avgViews: Number(influencer.avg_views || 15000),
+            view_count: Number(influencer.avg_views || 15000),
+            engagementRate: Number(influencer.engagement_rate || 4.8),
+            engagement_rate: Number(influencer.engagement_rate || 4.8) / 100,
+            graphScore: Number(influencer.graph_score || 85),
+            finalScore: Number(influencer.graph_score || 85),
+            recommendation_score: Number(influencer.graph_score || 85) / 100,
+            semantic_similarity: 0.85,
+            engagement_score: 0.82,
+            budget_fit: 'verified',
+            reasons: ['Verified platform creator'],
+            estimatedCost: Number(influencer.estimated_cost || 95000),
+            avatar: influencer.avatar,
+            thumbnail_url: influencer.avatar,
+            profileUrl: `https://www.youtube.com/${String(influencer.youtube_handle || '').startsWith('@') ? influencer.youtube_handle : '@' + (influencer.youtube_handle || 'youtube')}`,
+            channel_url: `https://www.youtube.com/${String(influencer.youtube_handle || '').startsWith('@') ? influencer.youtube_handle : '@' + (influencer.youtube_handle || 'youtube')}`
+          }
+        });
+      }
+    }
+
+    return res.status(404).json({ success: false, message: "Influencer not found" });
   } catch (err) {
     console.error("getInfluencerById error:", err);
     return res.status(500).json({ success: false, message: "Internal server error" });
@@ -60,10 +202,8 @@ const updateInfluencerProfile = async (req, res) => {
 
     const targetUserId = (userId && userId.includes('-')) ? userId : 'a0000000-0000-0000-0000-000000000002';
 
-    // Ensure profile exists in profiles table
     await supabase.from('profiles').upsert({ id: targetUserId, account_type: 'influencer' });
 
-    // Check if influencer record exists for this user_id
     const { data: existing } = await supabase
       .from('influencers')
       .select('*')
@@ -104,7 +244,7 @@ const updateInfluencerProfile = async (req, res) => {
         full_name: fullName || 'Creator Name',
         creator_name: creatorName || fullName || 'Creator Name',
         youtube_handle: handle || '@creator',
-        content_niche_category: category || 'Technology',
+        content_niche_category: category || 'fashion',
         state_ut: state || 'Karnataka',
         bio: bio || '',
         subscribers: subscribers ? Number(subscribers) : 50000,
@@ -141,13 +281,12 @@ const updateInfluencerProfile = async (req, res) => {
 // Save inquiry / application to database
 const sendInquiry = async (req, res) => {
   try {
-    const { companyId, influencerId, campaignId, message, bidAmount, creatorId } = req.body;
+    const { companyId, influencerId, campaignId, campaignName, companyName, deliverables, message, bidAmount, creatorId } = req.body;
 
     const targetInfluencerId = (influencerId || creatorId || 'rohan-mehta').toString();
-    const targetCompanyId = (companyId && companyId.includes('-')) ? companyId : 'a0000000-0000-0000-0000-000000000001';
-    const targetCampaignId = (campaignId && campaignId.includes('-')) ? campaignId : null;
+    const targetCompanyId = (companyId && companyId.includes('-') && !companyId.startsWith('google-')) ? companyId : 'a0000000-0000-0000-0000-000000000001';
+    const targetCampaignId = campaignId ? String(campaignId) : null;
 
-    // Ensure profile exists in profiles table
     await supabase.from('profiles').upsert({ id: targetCompanyId, account_type: 'brand' });
 
     const { data: inquiry, error } = await supabase
@@ -156,6 +295,9 @@ const sendInquiry = async (req, res) => {
         company_id: targetCompanyId,
         influencer_id: targetInfluencerId,
         campaign_id: targetCampaignId,
+        campaign_name: campaignName || 'Sponsorship Campaign',
+        company_name: companyName || 'Brand Partner',
+        deliverables: Array.isArray(deliverables) && deliverables.length > 0 ? deliverables : ['Dedicated Video'],
         message: message || '',
         bid_amount: bidAmount ? Number(bidAmount) : null,
         status: 'New'
@@ -175,13 +317,24 @@ const sendInquiry = async (req, res) => {
   }
 };
 
-// Get inquiries
+// Get inquiries scoped to user
 const getInquiries = async (req, res) => {
   try {
-    const { data: inquiries, error } = await supabase
+    const { companyId, influencerId } = req.query;
+    let query = supabase
       .from('inquiries')
       .select('*')
       .order('created_at', { ascending: false });
+
+    if (companyId && companyId !== 'undefined' && companyId !== 'null') {
+      query = query.eq('company_id', String(companyId));
+    } else if (influencerId && influencerId !== 'undefined' && influencerId !== 'null') {
+      query = query.eq('influencer_id', String(influencerId));
+    } else {
+      return res.status(200).json({ success: true, inquiries: [] });
+    }
+
+    const { data: inquiries, error } = await query;
 
     if (error) {
       return res.status(200).json({ success: true, inquiries: [] });
@@ -223,10 +376,12 @@ const toggleSaveInfluencer = async (req, res) => {
   try {
     const { userId, influencerId } = req.body;
 
-    const targetUserId = (userId && userId.includes('-')) ? userId : 'a0000000-0000-0000-0000-000000000001';
-    const targetInfluencerId = (influencerId || 'rohan-mehta').toString();
+    if (!userId || !String(userId).includes('-') || String(userId).startsWith('google-')) {
+      return res.status(401).json({ success: false, message: "Valid authenticated user ID required" });
+    }
+    const targetUserId = String(userId);
+    const targetInfluencerId = (influencerId || '').toString();
 
-    // Ensure profile exists in profiles table
     await supabase.from('profiles').upsert({ id: targetUserId, account_type: 'brand' });
 
     const { data: existing } = await supabase
@@ -266,23 +421,85 @@ const toggleSaveInfluencer = async (req, res) => {
   }
 };
 
-// Get Saved Influencer IDs for User
+// Get Saved Influencers (resolves both savedIds AND full channel objects from ml_channels + influencers)
 const getSavedInfluencers = async (req, res) => {
   try {
     const { userId } = req.params;
-    const targetUserId = (userId && userId.includes('-')) ? userId : 'a0000000-0000-0000-0000-000000000001';
+    if (!userId || userId === 'undefined' || userId === 'null' || !String(userId).includes('-')) {
+      return res.status(200).json({ success: true, savedIds: [], savedInfluencers: [] });
+    }
+    const targetUserId = String(userId);
 
     const { data: saved, error } = await supabase
       .from('saved_influencers')
-      .select('influencer_id')
-      .eq('user_id', targetUserId);
+      .select('influencer_id, created_at')
+      .eq('user_id', targetUserId)
+      .order('created_at', { ascending: false });
 
-    if (error || !saved) {
-      return res.status(200).json({ success: true, savedIds: [] });
+    if (error || !saved || saved.length === 0) {
+      return res.status(200).json({ success: true, savedIds: [], savedInfluencers: [] });
     }
 
     const savedIds = saved.map((s) => s.influencer_id);
-    return res.status(200).json({ success: true, savedIds });
+
+    // Resolve channel records from ml_channels
+    const { data: mlMatches } = await supabase
+      .from('ml_channels')
+      .select('*')
+      .in('channel_id', savedIds);
+
+    const savedInfluencers = [];
+    const foundIds = new Set();
+
+    if (mlMatches) {
+      mlMatches.forEach((ch) => {
+        foundIds.add(ch.channel_id);
+        savedInfluencers.push(mapMlChannelToInfluencer(ch));
+      });
+    }
+
+    // Resolve any numeric IDs from public.influencers
+    const numericIds = savedIds.filter((id) => !foundIds.has(id) && /^\d+$/.test(String(id))).map(Number);
+    if (numericIds.length > 0) {
+      const { data: dbMatches } = await supabase
+        .from('influencers')
+        .select('*')
+        .in('id', numericIds);
+
+      if (dbMatches) {
+        dbMatches.forEach((inf) => {
+          savedInfluencers.push({
+            id: inf.id.toString(),
+            channel_id: inf.id.toString(),
+            name: inf.full_name,
+            channel_name: inf.creator_name || inf.full_name,
+            creatorName: inf.creator_name,
+            handle: inf.youtube_handle,
+            category: inf.content_niche_category,
+            country: 'IN',
+            state: inf.state_ut,
+            tier: 'macro',
+            bio: inf.bio || 'Verified content creator.',
+            platform: inf.primary_platform || 'YouTube',
+            subscribers: Number(inf.subscribers || 50000),
+            subscriber_count: Number(inf.subscribers || 50000),
+            avgViews: Number(inf.avg_views || 15000),
+            view_count: Number(inf.avg_views || 15000),
+            engagementRate: Number(inf.engagement_rate || 4.8),
+            engagement_rate: Number(inf.engagement_rate || 4.8) / 100,
+            graphScore: Number(inf.graph_score || 85),
+            finalScore: Number(inf.graph_score || 85),
+            recommendation_score: Number(inf.graph_score || 85) / 100,
+            avatar: inf.avatar,
+            thumbnail_url: inf.avatar,
+            profileUrl: `https://www.youtube.com/${String(inf.youtube_handle || '').startsWith('@') ? inf.youtube_handle : '@' + (inf.youtube_handle || 'youtube')}`,
+            channel_url: `https://www.youtube.com/${String(inf.youtube_handle || '').startsWith('@') ? inf.youtube_handle : '@' + (inf.youtube_handle || 'youtube')}`
+          });
+        });
+      }
+    }
+
+    return res.status(200).json({ success: true, savedIds, savedInfluencers });
   } catch (err) {
     console.error("getSavedInfluencers error:", err);
     return res.status(500).json({ success: false, message: "Internal server error" });

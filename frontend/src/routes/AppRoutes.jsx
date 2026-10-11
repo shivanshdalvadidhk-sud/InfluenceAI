@@ -46,6 +46,7 @@ const AppRoutes = () => {
       {/* Brand Partner Layout Dashboard routes */}
       <Route element={<DashboardLayout allowedRole="Company" />}>
         <Route path="/company/dashboard" element={<CompanyDashboard />} />
+        <Route path="/company/campaigns" element={<Navigate to="/company/campaigns/create" replace />} />
         <Route path="/company/campaigns/create" element={<CreateCampaign />} />
         <Route path="/company/recommendations" element={<Recommendations />} />
         <Route path="/company/influencers/:id" element={<InfluencerDetail />} />
