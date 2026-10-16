@@ -48,8 +48,8 @@ const InfluencerDashboard = () => {
     }
   };
 
-  const newOffersCount = inquiries.filter((i) => i.status === 'New').length;
-  const acceptedCount = inquiries.filter((i) => i.status === 'Interested').length;
+  const newOffersCount = inquiries.filter((i) => i.status === 'Pending' || i.status === 'New').length;
+  const acceptedCount = inquiries.filter((i) => i.status === 'Accepted' || i.status === 'Interested').length;
   const hasProfileDetails = Boolean(creator?.bio && creator?.subscribers > 0);
 
   return (
@@ -119,6 +119,8 @@ const InfluencerDashboard = () => {
               const campaignName = inq.campaignName || 'Sponsorship Collaboration Proposal';
               const companyName = inq.companyName || 'Brand Partner';
               const budgetDisplay = inq.budgetStr || (inq.budget ? `₹${Number(inq.budget).toLocaleString('en-IN')}` : '₹0');
+              const isPending = inq.status === 'Pending' || inq.status === 'New';
+              const isAccepted = inq.status === 'Accepted' || inq.status === 'Interested';
 
               return (
                 <div
@@ -141,28 +143,31 @@ const InfluencerDashboard = () => {
                         style={{
                           fontSize: '0.72rem',
                           fontWeight: 700,
-                          backgroundColor: inq.status === 'New' ? 'rgba(59, 130, 246, 0.08)' : 'rgba(16, 185, 129, 0.08)',
-                          color: inq.status === 'New' ? 'var(--accent-blue)' : 'var(--accent-green)',
+                          backgroundColor: isPending ? '#FEF3C7' : isAccepted ? '#D1FAE5' : '#FEE2E2',
+                          color: isPending ? '#B45309' : isAccepted ? '#065F46' : '#B91C1C',
                           padding: '2px 8px',
                           borderRadius: '4px'
                         }}
                       >
-                        {inq.status || 'New'}
+                        {isPending ? 'Pending Response' : isAccepted ? 'Accepted' : 'Declined'}
                       </span>
                     </div>
                     <span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', display: 'block', marginTop: '4px' }}>
                       Brand: <strong>{companyName}</strong> • Budget Offer: <strong>{budgetDisplay}</strong>
+                      {inq.deliverables && (
+                        <span> • Deliverables: <em>{Array.isArray(inq.deliverables) ? inq.deliverables.join(', ') : inq.deliverables}</em></span>
+                      )}
                     </span>
                   </div>
 
-                  {inq.status === 'New' ? (
+                  {isPending ? (
                     <div style={{ display: 'flex', gap: '8px' }}>
                       <button
                         onClick={() => handleUpdateStatus(inq.id, 'Declined')}
                         style={{
-                          backgroundColor: 'transparent',
+                          backgroundColor: '#FEF2F2',
                           color: 'var(--accent-red)',
-                          border: '1px solid rgba(239, 68, 68, 0.2)',
+                          border: '1px solid rgba(239, 68, 68, 0.3)',
                           borderRadius: '6px',
                           padding: '6px 12px',
                           fontSize: '0.75rem',
@@ -173,25 +178,31 @@ const InfluencerDashboard = () => {
                         Decline
                       </button>
                       <button
-                        onClick={() => handleUpdateStatus(inq.id, 'Interested')}
+                        onClick={() => handleUpdateStatus(inq.id, 'Accepted')}
                         style={{
                           backgroundColor: 'var(--accent-green)',
                           color: 'white',
                           border: 'none',
                           borderRadius: '6px',
-                          padding: '6px 12px',
+                          padding: '6px 14px',
                           fontSize: '0.75rem',
                           fontWeight: 600,
-                          cursor: 'pointer'
+                          cursor: 'pointer',
+                          boxShadow: '0 2px 4px rgba(16, 185, 129, 0.2)'
                         }}
                       >
-                        Accept
+                        Accept Offer
                       </button>
                     </div>
+                  ) : isAccepted ? (
+                    <span style={{ fontSize: '0.78rem', color: '#065F46', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <CheckCircle size={14} color="#059669" />
+                      <span>Accepted & Active</span>
+                    </span>
                   ) : (
                     <span style={{ fontSize: '0.78rem', color: 'var(--text-light)', display: 'flex', alignItems: 'center', gap: '4px' }}>
                       <Clock size={12} />
-                      <span>Responded ({inq.status})</span>
+                      <span>Declined</span>
                     </span>
                   )}
                 </div>

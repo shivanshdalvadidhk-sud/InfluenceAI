@@ -36,6 +36,41 @@ const getInquiriesFromStorage = () => {
   }
 };
 
+// Bulletproof YouTube URL formatter
+export function buildSafeYoutubeUrl(handleOrUrl, channelId = null) {
+  const raw = String(handleOrUrl || '').trim();
+  if (!raw && !channelId) return 'https://www.youtube.com';
+
+  // If there's duplicate/nested http prefix (e.g. https://www.youtube.com/@https://...)
+  if (raw.includes('http') && raw.indexOf('http') !== raw.lastIndexOf('http')) {
+    const lastHttpIdx = raw.lastIndexOf('http');
+    return raw.slice(lastHttpIdx).trim();
+  }
+
+  // If already an absolute http URL
+  if (raw.startsWith('http://') || raw.startsWith('https://')) {
+    return raw.replace(/youtube\.com\/@https?:\/\//i, 'youtube.com/@');
+  }
+
+  if (channelId && String(channelId).startsWith('UC')) {
+    return `https://www.youtube.com/channel/${channelId}`;
+  }
+
+  if (raw.startsWith('UC') && raw.length >= 20) {
+    return `https://www.youtube.com/channel/${raw}`;
+  }
+
+  if (raw.startsWith('@')) {
+    return `https://www.youtube.com/${raw}`;
+  }
+
+  if (raw) {
+    return `https://www.youtube.com/@${raw}`;
+  }
+
+  return channelId ? `https://www.youtube.com/channel/${channelId}` : 'https://www.youtube.com';
+}
+
 const normalizeInfluencer = (inf) => {
   if (!inf) return null;
   const id = (inf.channel_id || inf.id || '').toString();
@@ -51,10 +86,9 @@ const normalizeInfluencer = (inf) => {
     (subscribers < 10000 ? 'nano' : subscribers < 100000 ? 'micro' : subscribers <= 500000 ? 'mid' : 'macro');
 
   const name = merged.channel_name || merged.full_name || merged.creator_name || merged.name || 'YouTube Creator';
-  const channelUrl =
-    merged.channel_url ||
-    merged.channelUrl ||
-    (id.startsWith('UC') ? `https://www.youtube.com/channel/${id}` : `https://www.youtube.com/${merged.youtube_handle || merged.handle || ''}`);
+  const rawHandle = merged.youtube_handle || merged.handle || '';
+  const channelUrl = buildSafeYoutubeUrl(merged.channel_url || merged.channelUrl || rawHandle, id);
+  const cleanHandle = String(rawHandle).startsWith('@') ? rawHandle : (rawHandle ? `@${rawHandle.replace(/^https?:\/\/(?:www\.)?youtube\.com\/@?/i, '')}` : `@${name.replace(/\s+/g, '').toLowerCase()}`);
   const thumbnailUrl =
     merged.thumbnail_url ||
     merged.avatar ||
@@ -261,7 +295,15 @@ export const influencerService = {
       const response = await api.post('/influencers/inquiry', {
         companyId: user?.userId || null,
         influencerId: inquiryData.influencerId || null,
+        channelId: inquiryData.channelId || null,
         campaignId: inquiryData.campaignId || null,
+        campaignName: inquiryData.campaignName || null,
+        companyName: inquiryData.companyName || user?.brandName || user?.name || null,
+        brandEmail: inquiryData.brandEmail || user?.email || null,
+        influencerName: inquiryData.influencerName || null,
+        influencerHandle: inquiryData.influencerHandle || null,
+        influencerAvatar: inquiryData.influencerAvatar || null,
+        deliverables: Array.isArray(inquiryData.deliverables) ? inquiryData.deliverables.join(', ') : inquiryData.deliverables || '',
         message: inquiryData.message || inquiryData.proposal || '',
         bidAmount: inquiryData.budget || inquiryData.bidAmount || null
       });
@@ -270,16 +312,20 @@ export const influencerService = {
         const inq = response.data.inquiry;
         created = {
           id: inq.id,
-          campaignName: inquiryData.campaignName || 'Sponsorship Integration Proposal',
-          companyName: inquiryData.companyName || user?.brandName || 'Brand Partner',
-          deliverables: inquiryData.deliverables || ['60s Dedicated Video', 'Instagram Story Cross-post'],
-          budgetStr: inq.bid_amount ? `₹${Number(inq.bid_amount).toLocaleString('en-IN')}` : '₹1,50,000',
+          campaignName: inq.campaign_name || inquiryData.campaignName || 'Sponsorship Integration Proposal',
+          companyName: inq.company_name || inquiryData.companyName || user?.brandName || 'Brand Partner',
+          influencerName: inq.influencer_name || inquiryData.influencerName || 'YouTube Creator',
+          influencerHandle: inq.influencer_handle || inquiryData.influencerHandle || '',
+          influencerAvatar: inq.influencer_avatar || inquiryData.influencerAvatar || null,
+          youtubeChannelId: inq.youtube_channel_id || inquiryData.channelId || null,
+          deliverables: inq.deliverables || inquiryData.deliverables || '60s Dedicated Video, Instagram Story Cross-post',
+          budgetStr: inq.bid_amount ? `₹${Number(inq.bid_amount).toLocaleString('en-IN')}` : (inquiryData.budgetStr || '₹1,50,000'),
           date: new Date(inq.created_at || Date.now()).toLocaleDateString('en-US', {
             month: 'short',
             day: 'numeric',
             year: 'numeric'
           }),
-          status: inq.status || 'New',
+          status: inq.status || 'Pending',
           ...inquiryData
         };
       }
@@ -293,10 +339,14 @@ export const influencerService = {
         id: `inq-${Date.now()}`,
         campaignName: inquiryData.campaignName || 'Campaign Collaboration Proposal',
         companyName: inquiryData.companyName || user?.brandName || user?.name || 'Brand Partner',
-        deliverables: inquiryData.deliverables || ['60s Video Integration', 'Instagram Story Cross-post'],
+        influencerName: inquiryData.influencerName || 'YouTube Creator',
+        influencerHandle: inquiryData.influencerHandle || '',
+        influencerAvatar: inquiryData.influencerAvatar || null,
+        youtubeChannelId: inquiryData.channelId || null,
+        deliverables: inquiryData.deliverables || '60s Video Integration, Instagram Story Cross-post',
         budgetStr: inquiryData.budget ? `₹${Number(inquiryData.budget).toLocaleString('en-IN')}` : '₹1,00,000',
         date: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
-        status: 'New',
+        status: 'Pending',
         ...inquiryData
       };
       list.unshift(created);
@@ -323,14 +373,19 @@ export const influencerService = {
           id: inq.id,
           companyId: inq.company_id,
           influencerId: inq.influencer_id,
+          youtubeChannelId: inq.youtube_channel_id,
+          influencerName: inq.influencer_name || 'YouTube Creator',
+          influencerHandle: inq.influencer_handle || '',
+          influencerAvatar: inq.influencer_avatar || null,
           campaignId: inq.campaign_id || '',
           campaignName: inq.campaign_name || 'Collaboration Proposal',
           companyName: inq.company_name || 'Brand Partner',
-          deliverables: Array.isArray(inq.deliverables) ? inq.deliverables : ['Video Integration'],
+          brandEmail: inq.brand_email || '',
+          deliverables: inq.deliverables || 'Video Integration',
           message: inq.message || '',
           budget: inq.bid_amount,
           budgetStr: inq.bid_amount ? `₹${Number(inq.bid_amount).toLocaleString('en-IN')}` : '₹0',
-          status: inq.status || 'New',
+          status: inq.status || 'Pending',
           date: new Date(inq.created_at || Date.now()).toLocaleDateString('en-US', {
             month: 'short',
             day: 'numeric',

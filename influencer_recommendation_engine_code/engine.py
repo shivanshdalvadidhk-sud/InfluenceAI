@@ -539,9 +539,10 @@ from sklearn.metrics.pairwise import cosine_similarity
 MODEL_NAME = "sentence-transformers/all-MiniLM-L6-v2"
 EMBEDDING_DIMENSIONS = 384
 
-# Recommendation score weights. Tune using real campaign outcomes.
-SEMANTIC_WEIGHT = 0.70
-ENGAGEMENT_WEIGHT = 0.30
+# Recommendation score weights combining semantic similarity, engagement, and audience comment sentiment.
+SEMANTIC_WEIGHT = 0.50
+ENGAGEMENT_WEIGHT = 0.35
+SENTIMENT_WEIGHT = 0.15
 
 # Budget-based tier eligibility rules.
 # These are proposed selection policies, not verified creator fees.
@@ -718,6 +719,11 @@ class RecommendationEngine:
             "country": "",
             "channel_url": "",
             "thumbnail_url": "",
+            "comment_sentiment_score": 0.5,
+            "dominant_sentiment": "neutral",
+            "positive_comment_count": 0,
+            "neutral_comment_count": 0,
+            "negative_comment_count": 0,
         }
 
         for column, default in defaults.items():
@@ -779,18 +785,14 @@ class RecommendationEngine:
 
         budget = number(budget_value, default=-1)
 
-        # Missing, invalid, zero or negative budgets return no results.
-        if budget <= 0:
-            return df.iloc[0:0].copy()
-
-        eligible_tiers = get_eligible_tiers(budget)
-
-        # Match existing database tier values.
-        df = df[
-            df["tier"].astype(str).str.strip().str.casefold().isin(
-                {tier.casefold() for tier in eligible_tiers}
-            )
-        ].copy()
+        # If budget is specified, filter by eligible tiers; otherwise allow all tiers
+        if budget > 0:
+            eligible_tiers = get_eligible_tiers(budget)
+            df = df[
+                df["tier"].astype(str).str.strip().str.casefold().isin(
+                    {tier.casefold() for tier in eligible_tiers}
+                )
+            ].copy()
 
         return df
 
@@ -906,18 +908,26 @@ class RecommendationEngine:
             df["engagement_rate"]
         )
 
-        # Combine content relevance and engagement.
+        # Audience Comment Sentiment score (0..1)
+        df["sentiment_score"] = pd.to_numeric(
+            df["comment_sentiment_score"],
+            errors="coerce"
+        ).fillna(0.5).clip(lower=0.0, upper=1.0)
+
+        # Combine content relevance, engagement, and audience comment sentiment.
         df["recommendation_score"] = (
             SEMANTIC_WEIGHT * df["semantic_similarity"]
             + ENGAGEMENT_WEIGHT * df["engagement_score"]
+            + SENTIMENT_WEIGHT * df["sentiment_score"]
         )
 
-        # Rank by overall score, then relevance, then engagement.
+        # Rank by overall score, then relevance, then engagement, then sentiment.
         df = df.sort_values(
             by=[
                 "recommendation_score",
                 "semantic_similarity",
                 "engagement_score",
+                "sentiment_score",
             ],
             ascending=False,
             kind="stable"
@@ -938,6 +948,8 @@ class RecommendationEngine:
         ):
             semantic = float(row["semantic_similarity"])
             engagement = float(row["engagement_score"])
+            sentiment_val = float(row["sentiment_score"])
+            dominant_sent = str(row.get("dominant_sentiment", "neutral")).lower()
 
             reasons = []
 
@@ -949,8 +961,13 @@ class RecommendationEngine:
             if engagement >= 0.65:
                 reasons.append("Strong relative engagement")
 
+            if sentiment_val >= 0.60 or dominant_sent == "positive":
+                reasons.append("Positive audience comment sentiment")
+            elif sentiment_val < 0.40 or dominant_sent == "negative":
+                reasons.append("Mixed or critical comment sentiment")
+
             if not reasons:
-                reasons.append("Ranked by combined relevance and engagement")
+                reasons.append("Ranked by combined relevance, engagement, and audience sentiment")
 
             subscriber_count = number(
                 row["subscriber_count"], default=-1
@@ -988,6 +1005,8 @@ class RecommendationEngine:
                 ),
                 "semantic_similarity": round(semantic, 4),
                 "engagement_score": round(engagement, 4),
+                "comment_sentiment_score": round(sentiment_val, 2),
+                "dominant_sentiment": dominant_sent,
                 "recommendation_score": round(
                     float(row["recommendation_score"]), 4
                 ),

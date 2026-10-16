@@ -120,6 +120,8 @@ function formatChannelRecommendation(aiRec, channelMeta = null) {
     semantic_similarity: Number(semanticSim.toFixed(4)),
     engagement_score: Number(engScore.toFixed(4)),
     recommendation_score: Number(recScore.toFixed(4)),
+    comment_sentiment_score: aiRec.comment_sentiment_score !== undefined ? aiRec.comment_sentiment_score : (channelMeta?.comment_sentiment_score ?? 0.5),
+    dominant_sentiment: aiRec.dominant_sentiment || channelMeta?.dominant_sentiment || 'neutral',
     budget_fit: budgetFit,
     reasons: reasons,
 
@@ -127,6 +129,10 @@ function formatChannelRecommendation(aiRec, channelMeta = null) {
     id: channelId,
     name: channelName,
     creatorName: channelName,
+    dominant_sentiment: aiRec.dominant_sentiment || channelMeta?.dominant_sentiment || 'neutral',
+    dominantSentiment: aiRec.dominant_sentiment || channelMeta?.dominant_sentiment || 'neutral',
+    comment_sentiment_score: aiRec.comment_sentiment_score !== undefined ? aiRec.comment_sentiment_score : (channelMeta?.comment_sentiment_score ?? 0.5),
+    commentSentimentScore: aiRec.comment_sentiment_score !== undefined ? aiRec.comment_sentiment_score : (channelMeta?.comment_sentiment_score ?? 0.5),
     handle: `@${channelName.replace(/[^a-zA-Z0-9_]/g, '').toLowerCase() || channelId.slice(0, 10)}`,
     avatar: thumbnailUrl,
     profileUrl: channelUrl,
@@ -145,6 +151,8 @@ function formatChannelRecommendation(aiRec, channelMeta = null) {
     audienceMatch: semanticMatchPct,
     graphScore: finalScorePct,
     finalScore: finalScorePct,
+    contact_email: aiRec.contact_email || channelMeta?.contact_email || null,
+    contactEmail: aiRec.contact_email || channelMeta?.contact_email || null,
     estimatedCost: estimateCostFromTierAndSubs(tier, subscriberCount)
   };
 }
@@ -269,9 +277,14 @@ const calculateRecommendationMatches = async (req, res) => {
     let rawAiRecommendations = [];
 
     try {
+      const forwardHeaders = { 'Content-Type': 'application/json' };
+      if (req.headers && req.headers.authorization) {
+        forwardHeaders['Authorization'] = req.headers.authorization;
+      }
+
       const response = await fetch(`${AI_ENGINE_URL}/recommend`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: forwardHeaders,
         body: JSON.stringify(aiRequestPayload),
         signal: AbortSignal.timeout(30000)
       });
@@ -334,6 +347,24 @@ const calculateRecommendationMatches = async (req, res) => {
         channelMetas.forEach((m) => {
           metaByChannelId[m.channel_id] = m;
         });
+      }
+
+      // Single batched query against registered_channels_public to attach contact_email
+      try {
+        const { data: regChannels } = await supabase
+          .from('registered_channels_public')
+          .select('youtube_channel_id, contact_email')
+          .in('youtube_channel_id', channelIds);
+
+        if (regChannels && regChannels.length > 0) {
+          regChannels.forEach((reg) => {
+            if (metaByChannelId[reg.youtube_channel_id]) {
+              metaByChannelId[reg.youtube_channel_id].contact_email = reg.contact_email;
+            }
+          });
+        }
+      } catch (regErr) {
+        console.warn('Notice: could not query registered_channels_public view:', regErr.message);
       }
     }
 

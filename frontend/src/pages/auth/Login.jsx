@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { authService } from '../../services/authService';
 import { showToast } from '../../components/common/Toast';
@@ -8,10 +8,21 @@ const Login = () => {
   const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [role, setRole] = useState('Company'); // Company or Influencer
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+
+  // Auto-redirect if already authenticated
+  useEffect(() => {
+    if (authService.isAuthenticated()) {
+      const role = authService.getCurrentRole();
+      if (role === 'Company' || role === 'brand') {
+        navigate('/company/dashboard', { replace: true });
+      } else {
+        navigate('/influencer/dashboard', { replace: true });
+      }
+    }
+  }, [navigate]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -25,10 +36,12 @@ const Login = () => {
 
     setLoading(true);
     try {
-      const user = await authService.login(email, password, role);
-      showToast(`Welcome back, ${user.name}!`, 'success');
+      // Unified login: automatically identifies Brand vs Influencer from account profile
+      const user = await authService.login(email, password);
+      showToast(`Welcome back, ${user.name || 'User'}!`, 'success');
 
-      if (role === 'Company') {
+      // Auto-redirect according to user role
+      if (user.role === 'Company' || user.role === 'brand') {
         navigate('/company/dashboard');
       } else {
         navigate('/influencer/dashboard');
@@ -88,7 +101,7 @@ const Login = () => {
         </span>
       </div>
 
-      {/* Main Login Card */}
+      {/* Main Unified Login Card */}
       <div
         style={{
           backgroundColor: 'white',
@@ -100,68 +113,12 @@ const Login = () => {
           boxShadow: 'var(--shadow-premium)'
         }}
       >
-        <h2 style={{ fontSize: '1.5rem', fontFamily: 'var(--font-heading)', marginBottom: '4px', textAlign: 'center' }}>
+        <h2 style={{ fontSize: '1.5rem', fontFamily: 'var(--font-heading)', marginBottom: '6px', textAlign: 'center' }}>
           Sign In to InfluenceAI
         </h2>
-        <p style={{ color: 'var(--text-secondary)', fontSize: '0.82rem', marginBottom: '24px', textAlign: 'center' }}>
-          Sign in with your registered {role === 'Company' ? 'Brand / Company' : 'Creator'} account.
+        <p style={{ color: 'var(--text-secondary)', fontSize: '0.84rem', marginBottom: '24px', textAlign: 'center' }}>
+          Enter your registered email and password to access your dashboard.
         </p>
-
-        {/* Role toggle */}
-        <div
-          style={{
-            display: 'flex',
-            backgroundColor: '#F1F5F9',
-            padding: '4px',
-            borderRadius: '10px',
-            marginBottom: '20px'
-          }}
-        >
-          <button
-            type="button"
-            onClick={() => {
-              setRole('Company');
-              setErrorMessage('');
-            }}
-            style={{
-              flex: 1,
-              padding: '8px 12px',
-              border: 'none',
-              borderRadius: '8px',
-              backgroundColor: role === 'Company' ? 'white' : 'transparent',
-              color: role === 'Company' ? 'var(--primary-purple)' : 'var(--text-secondary)',
-              fontWeight: 600,
-              fontSize: '0.82rem',
-              cursor: 'pointer',
-              boxShadow: role === 'Company' ? '0 2px 4px rgba(0,0,0,0.06)' : 'none',
-              transition: 'all 0.2s'
-            }}
-          >
-            Brand / Company
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setRole('Influencer');
-              setErrorMessage('');
-            }}
-            style={{
-              flex: 1,
-              padding: '8px 12px',
-              border: 'none',
-              borderRadius: '8px',
-              backgroundColor: role === 'Influencer' ? 'white' : 'transparent',
-              color: role === 'Influencer' ? 'var(--primary-purple)' : 'var(--text-secondary)',
-              fontWeight: 600,
-              fontSize: '0.82rem',
-              cursor: 'pointer',
-              boxShadow: role === 'Influencer' ? '0 2px 4px rgba(0,0,0,0.06)' : 'none',
-              transition: 'all 0.2s'
-            }}
-          >
-            Influencer / Creator
-          </button>
-        </div>
 
         {errorMessage && (
           <div
@@ -188,7 +145,7 @@ const Login = () => {
             <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
               <input
                 type="email"
-                placeholder="you@company.com"
+                placeholder="you@domain.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
@@ -273,7 +230,8 @@ const Login = () => {
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              gap: '8px'
+              gap: '8px',
+              cursor: 'pointer'
             }}
           >
             {loading ? (
@@ -290,7 +248,7 @@ const Login = () => {
             ) : (
               <>
                 <ShieldCheck size={18} />
-                <span>Sign In as {role === 'Company' ? 'Brand / Company' : 'Influencer'}</span>
+                <span>Sign In to Dashboard</span>
               </>
             )}
           </button>

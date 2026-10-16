@@ -52,16 +52,33 @@ const Inquiries = () => {
 
   const getStatusStyle = (status) => {
     switch (status) {
+      case 'Pending':
       case 'New':
-        return { bg: 'rgba(59, 130, 246, 0.08)', text: 'var(--accent-blue)' };
+        return { bg: '#FEF3C7', text: '#B45309', label: 'Pending Response' };
+      case 'Accepted':
       case 'Interested':
-        return { bg: 'rgba(16, 185, 129, 0.08)', text: 'var(--accent-green)' };
+        return { bg: '#D1FAE5', text: '#065F46', label: 'Accepted' };
       case 'Declined':
-        return { bg: 'rgba(239, 68, 68, 0.08)', text: 'var(--accent-red)' };
+        return { bg: '#FEE2E2', text: '#B91C1C', label: 'Declined' };
       default:
-        return { bg: '#F1F5F9', text: 'var(--text-secondary)' };
+        return { bg: '#F1F5F9', text: 'var(--text-secondary)', label: status || 'Pending' };
     }
   };
+
+  // Filter pipeline
+  useEffect(() => {
+    if (statusFilter === 'All') {
+      setFilteredInquiries(inquiries);
+    } else if (statusFilter === 'Pending') {
+      setFilteredInquiries((inquiries || []).filter((i) => i.status === 'Pending' || i.status === 'New'));
+    } else if (statusFilter === 'Accepted') {
+      setFilteredInquiries((inquiries || []).filter((i) => i.status === 'Accepted' || i.status === 'Interested'));
+    } else if (statusFilter === 'Declined') {
+      setFilteredInquiries((inquiries || []).filter((i) => i.status === 'Declined'));
+    } else {
+      setFilteredInquiries((inquiries || []).filter((i) => i.status === statusFilter));
+    }
+  }, [statusFilter, inquiries]);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', paddingBottom: '50px' }}>
@@ -74,7 +91,7 @@ const Inquiries = () => {
 
       {/* Filter Tabs */}
       <div style={{ display: 'flex', gap: '8px', borderBottom: '1px solid var(--border-color)', paddingBottom: '8px', flexWrap: 'wrap' }}>
-        {['All', 'New', 'Interested', 'Declined', 'Closed'].map((status) => (
+        {['All', 'Pending', 'Accepted', 'Declined'].map((status) => (
           <button
             key={status}
             onClick={() => setStatusFilter(status)}
@@ -134,11 +151,12 @@ const Inquiries = () => {
                       {campaignName}
                     </span>
                     <span style={{ backgroundColor: styles.bg, color: styles.text, fontSize: '0.72rem', fontWeight: 700, padding: '3px 8px', borderRadius: '6px' }}>
-                      {inq.status || 'New'}
+                      {styles.label || inq.status || 'Pending'}
                     </span>
                   </div>
                   <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', display: 'block', marginTop: '6px' }}>
                     Proposed by: <strong style={{ color: 'var(--text-primary)' }}>{companyName}</strong>
+                    {inq.brandEmail && <span style={{ marginLeft: '8px', color: 'var(--text-light)' }}>({inq.brandEmail})</span>}
                   </span>
                   
                   {/* Info badges */}
@@ -153,59 +171,38 @@ const Inquiries = () => {
                     </span>
                     <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                       <ListCollapse size={14} style={{ color: 'var(--text-light)' }} />
-                      Deliverables: {deliverablesArray.join(', ')}
+                      Deliverables: {Array.isArray(deliverablesArray) ? deliverablesArray.join(', ') : deliverablesArray}
                     </span>
                   </div>
                 </div>
 
                 {/* Actions Panel */}
                 <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
-                  
-                  {/* View details */}
-                  <button
-                    onClick={() => navigate(`/influencer/opportunities/${inq.campaignId || 'camp-1'}`)}
-                    style={{
-                      padding: '10px 16px',
-                      borderRadius: '8px',
-                      border: '1px solid var(--border-color)',
-                      backgroundColor: 'white',
-                      color: 'var(--primary-purple)',
-                      fontWeight: 600,
-                      fontSize: '0.8rem',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '4px',
-                    }}
-                  >
-                    <BookOpen size={14} />
-                    <span>View Campaign Brief</span>
-                  </button>
-
                   {/* Accept/Decline triggers */}
-                  {inq.status === 'New' && (
+                  {(inq.status === 'Pending' || inq.status === 'New') ? (
                     <>
                       <button
                         onClick={() => handleUpdateStatus(inq.id, 'Declined')}
                         style={{
-                          padding: '10px',
+                          padding: '10px 14px',
                           borderRadius: '8px',
-                          border: '1px solid rgba(239, 68, 68, 0.2)',
-                          backgroundColor: 'transparent',
+                          border: '1px solid rgba(239, 68, 68, 0.3)',
+                          backgroundColor: '#FEF2F2',
                           color: 'var(--accent-red)',
                           cursor: 'pointer',
                           display: 'flex',
                           alignItems: 'center',
-                          justifyContent: 'center',
+                          gap: '6px',
+                          fontSize: '0.8rem',
+                          fontWeight: 600,
                           transition: 'all 0.2s',
                         }}
-                        onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'rgba(239, 68, 68, 0.05)')}
-                        onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
                       >
-                        <X size={16} />
+                        <X size={15} />
+                        <span>Decline</span>
                       </button>
                       <button
-                        onClick={() => handleUpdateStatus(inq.id, 'Interested')}
+                        onClick={() => handleUpdateStatus(inq.id, 'Accepted')}
                         style={{
                           padding: '10px 18px',
                           borderRadius: '8px',
@@ -219,14 +216,43 @@ const Inquiries = () => {
                           alignItems: 'center',
                           gap: '6px',
                           transition: 'opacity 0.2s',
+                          boxShadow: '0 2px 4px rgba(16, 185, 129, 0.2)'
                         }}
-                        onMouseEnter={(e) => (e.currentTarget.style.opacity = 0.9)}
-                        onMouseLeave={(e) => (e.currentTarget.style.opacity = 1)}
                       >
                         <Check size={16} />
                         <span>Accept Offer</span>
                       </button>
                     </>
+                  ) : (inq.status === 'Accepted' || inq.status === 'Interested') ? (
+                    <span
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        padding: '8px 14px',
+                        borderRadius: '8px',
+                        backgroundColor: '#D1FAE5',
+                        color: '#065F46',
+                        fontWeight: 700,
+                        fontSize: '0.8rem',
+                      }}
+                    >
+                      <Check size={16} />
+                      <span>Accepted & Active</span>
+                    </span>
+                  ) : (
+                    <span
+                      style={{
+                        padding: '8px 14px',
+                        borderRadius: '8px',
+                        backgroundColor: '#FEE2E2',
+                        color: '#B91C1C',
+                        fontWeight: 600,
+                        fontSize: '0.8rem',
+                      }}
+                    >
+                      Declined
+                    </span>
                   )}
                 </div>
               </div>

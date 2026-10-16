@@ -4,7 +4,7 @@ import { authService } from '../../services/authService';
 import { influencerService } from '../../services/influencerService';
 import { showToast } from '../../components/common/Toast';
 import { INDIAN_STATES } from '../../data/mockData';
-import { User, Video, Radio, DollarSign, Save } from 'lucide-react';
+import { User, Video, Radio, DollarSign, Save, Mail, CheckCircle2, Clock, Check, X, Calendar, Sparkles } from 'lucide-react';
 
 const InfluencerProfile = () => {
   const [currentUser, setCurrentUser] = useState(null);
@@ -36,6 +36,38 @@ const InfluencerProfile = () => {
     'Beauty', 'Automobile', 'Art & Craft'
   ];
   const [selectedCategories, setSelectedCategories] = useState(['Technology']);
+
+  // Brand Inquiries
+  const [inquiries, setInquiries] = useState([]);
+  const [loadingInquiries, setLoadingInquiries] = useState(true);
+
+  const loadInquiries = async () => {
+    setLoadingInquiries(true);
+    try {
+      const data = await influencerService.getInquiries();
+      setInquiries(data || []);
+    } catch (err) {
+      console.warn('Error loading inquiries in profile:', err);
+    } finally {
+      setLoadingInquiries(false);
+    }
+  };
+
+  const handleUpdateInquiryStatus = async (id, status) => {
+    try {
+      await influencerService.updateInquiryStatus(id, status);
+      showToast(`Campaign inquiry marked as ${status}! Status reflected to brand partner.`, 'success');
+      loadInquiries();
+    } catch (err) {
+      showToast('Error updating inquiry status.', 'error');
+    }
+  };
+
+  useEffect(() => {
+    loadInquiries();
+    window.addEventListener('influenceai_inquiries_changed', loadInquiries);
+    return () => window.removeEventListener('influenceai_inquiries_changed', loadInquiries);
+  }, []);
 
   useEffect(() => {
     const user = authService.getCurrentUser();
@@ -116,6 +148,196 @@ const InfluencerProfile = () => {
         subtitle="Update your channel metrics, content categories, and collaboration rate cards."
         icon={<User size={22} />}
       />
+
+      {/* DIRECT BRAND INQUIRIES & SPONSORSHIP OFFERS */}
+      <div
+        style={{
+          backgroundColor: 'white',
+          borderRadius: 'var(--border-radius-lg)',
+          border: '1px solid var(--border-color)',
+          padding: '28px',
+          boxShadow: 'var(--shadow-sm)',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '18px'
+        }}
+      >
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-light)', paddingBottom: '14px', flexWrap: 'wrap', gap: '10px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Mail size={18} style={{ color: 'var(--primary-purple)' }} />
+            <h3 style={{ fontSize: '1rem', fontWeight: 700, margin: 0, fontFamily: 'var(--font-heading)' }}>
+              Brand Campaign Inquiries & Sponsorship Offers
+            </h3>
+          </div>
+          <span
+            style={{
+              fontSize: '0.75rem',
+              fontWeight: 700,
+              backgroundColor: 'rgba(124, 58, 237, 0.08)',
+              color: 'var(--primary-purple)',
+              padding: '4px 10px',
+              borderRadius: '20px'
+            }}
+          >
+            {inquiries.filter(i => i.status === 'Pending' || i.status === 'New').length} Pending • {inquiries.filter(i => i.status === 'Accepted' || i.status === 'Interested').length} Accepted
+          </span>
+        </div>
+
+        {loadingInquiries ? (
+          <div style={{ textAlign: 'center', padding: '24px 0', color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
+            Syncing brand campaign inquiries...
+          </div>
+        ) : inquiries.length > 0 ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+            {inquiries.map((inq) => {
+              const isPending = inq.status === 'Pending' || inq.status === 'New';
+              const isAccepted = inq.status === 'Accepted' || inq.status === 'Interested';
+              const budgetDisplay = inq.budgetStr || (inq.budget ? `₹${Number(inq.budget).toLocaleString('en-IN')}` : '₹0');
+
+              return (
+                <div
+                  key={inq.id}
+                  style={{
+                    border: '1px solid var(--border-color)',
+                    borderRadius: '10px',
+                    padding: '16px 18px',
+                    backgroundColor: isPending ? '#FFFBEB' : isAccepted ? '#F0FDF4' : '#F8FAFC',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    flexWrap: 'wrap',
+                    gap: '12px'
+                  }}
+                >
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', maxWidth: '65%' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                      <span style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--text-primary)' }}>
+                        {inq.campaignName || 'Sponsorship Collaboration Proposal'}
+                      </span>
+                      <span
+                        style={{
+                          fontSize: '0.72rem',
+                          fontWeight: 700,
+                          backgroundColor: isPending ? '#FEF3C7' : isAccepted ? '#D1FAE5' : '#FEE2E2',
+                          color: isPending ? '#B45309' : isAccepted ? '#065F46' : '#B91C1C',
+                          padding: '2px 8px',
+                          borderRadius: '4px'
+                        }}
+                      >
+                        {isPending ? 'Pending Response' : isAccepted ? 'Accepted' : 'Declined'}
+                      </span>
+                    </div>
+
+                    <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                      Proposed by: <strong style={{ color: 'var(--text-primary)' }}>{inq.companyName || 'Brand Partner'}</strong>
+                      {inq.brandEmail && <span style={{ marginLeft: '6px', color: 'var(--text-light)' }}>({inq.brandEmail})</span>}
+                    </span>
+
+                    <div style={{ display: 'flex', gap: '14px', fontSize: '0.78rem', color: 'var(--text-secondary)', marginTop: '4px', flexWrap: 'wrap' }}>
+                      <span>Budget Offer: <strong style={{ color: 'var(--accent-green)' }}>{budgetDisplay}</strong></span>
+                      {inq.deliverables && (
+                        <span>Deliverables: <strong>{Array.isArray(inq.deliverables) ? inq.deliverables.join(', ') : inq.deliverables}</strong></span>
+                      )}
+                      <span>Received: {inq.date || 'Recent'}</span>
+                    </div>
+                  </div>
+
+                  {/* Accept / Decline actions */}
+                  <div>
+                    {isPending ? (
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        <button
+                          type="button"
+                          onClick={() => handleUpdateInquiryStatus(inq.id, 'Declined')}
+                          style={{
+                            padding: '8px 14px',
+                            borderRadius: '8px',
+                            border: '1px solid rgba(239, 68, 68, 0.3)',
+                            backgroundColor: '#FEF2F2',
+                            color: 'var(--accent-red)',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            fontSize: '0.78rem',
+                            fontWeight: 600,
+                            transition: 'all 0.2s',
+                          }}
+                        >
+                          <X size={14} />
+                          <span>Decline</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleUpdateInquiryStatus(inq.id, 'Accepted')}
+                          style={{
+                            padding: '8px 16px',
+                            borderRadius: '8px',
+                            border: 'none',
+                            backgroundColor: 'var(--accent-green)',
+                            color: 'white',
+                            fontWeight: 600,
+                            fontSize: '0.78rem',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '5px',
+                            boxShadow: '0 2px 4px rgba(16, 185, 129, 0.25)'
+                          }}
+                        >
+                          <Check size={14} />
+                          <span>Accept Offer</span>
+                        </button>
+                      </div>
+                    ) : isAccepted ? (
+                      <span
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          padding: '6px 12px',
+                          borderRadius: '8px',
+                          backgroundColor: '#D1FAE5',
+                          color: '#065F46',
+                          fontWeight: 700,
+                          fontSize: '0.78rem'
+                        }}
+                      >
+                        <CheckCircle2 size={15} color="#059669" />
+                        <span>Accepted & Active</span>
+                      </span>
+                    ) : (
+                      <span
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          padding: '6px 12px',
+                          borderRadius: '8px',
+                          backgroundColor: '#FEE2E2',
+                          color: '#B91C1C',
+                          fontWeight: 600,
+                          fontSize: '0.78rem'
+                        }}
+                      >
+                        <Clock size={13} />
+                        <span>Declined</span>
+                      </span>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div style={{ textAlign: 'center', padding: '24px 16px', backgroundColor: '#F8FAFC', borderRadius: '8px' }}>
+            <span style={{ fontSize: '24px', display: 'block', marginBottom: '6px' }}>📬</span>
+            <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+              No brand sponsorship inquiries yet. When brands review your channel recommendations and send campaign proposals, they will show here for you to accept or decline.
+            </p>
+          </div>
+        )}
+      </div>
 
       <form onSubmit={handleSave} style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
         

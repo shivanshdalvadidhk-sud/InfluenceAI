@@ -1,6 +1,7 @@
 import React from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import DashboardLayout from '../components/layout/DashboardLayout';
+import ProtectedRoute from '../components/common/ProtectedRoute';
 
 // Public pages
 import LandingPage from '../pages/public/LandingPage';
@@ -27,6 +28,7 @@ import InfluencerProfile from '../pages/influencer/InfluencerProfile';
 import Inquiries from '../pages/influencer/Inquiries';
 import OpportunityDetail from '../pages/influencer/OpportunityDetail';
 import SavedOpportunities from '../pages/influencer/SavedOpportunities';
+import RegisterChannel from '../pages/influencer/RegisterChannel';
 
 // Shared pages
 import Notifications from '../pages/Notifications';
@@ -44,7 +46,7 @@ const AppRoutes = () => {
       <Route path="/reset-password" element={<ResetPassword />} />
 
       {/* Brand Partner Layout Dashboard routes */}
-      <Route element={<DashboardLayout allowedRole="Company" />}>
+      <Route element={<ProtectedRoute allowedRole="brand"><DashboardLayout allowedRole="Company" /></ProtectedRoute>}>
         <Route path="/company/dashboard" element={<CompanyDashboard />} />
         <Route path="/company/campaigns" element={<Navigate to="/company/campaigns/create" replace />} />
         <Route path="/company/campaigns/create" element={<CreateCampaign />} />
@@ -60,8 +62,10 @@ const AppRoutes = () => {
       </Route>
 
       {/* Creator Layout Dashboard routes */}
-      <Route element={<DashboardLayout allowedRole="Influencer" />}>
+      <Route element={<ProtectedRoute allowedRole="influencer"><DashboardLayout allowedRole="Influencer" /></ProtectedRoute>}>
         <Route path="/influencer/dashboard" element={<InfluencerDashboard />} />
+        <Route path="/influencer/register-channel" element={<RegisterChannel />} />
+        <Route path="/influencer/channel" element={<Navigate to="/influencer/register-channel" replace />} />
         <Route path="/influencer/profile" element={<InfluencerProfile />} />
         <Route path="/influencer/inquiries" element={<Inquiries />} />
         <Route path="/influencer/opportunities/:id" element={<OpportunityDetail />} />

@@ -1,22 +1,62 @@
 import api from './api';
+import { supabase } from '../lib/supabaseClient';
 
 export const authService = {
-  login: async (email, password, role) => {
+  login: async (email, password, role = null) => {
+    const cleanEmail = String(email || '').trim().toLowerCase();
     try {
-      const response = await api.post('/auth/login', { email, password, role });
-      if (response.data && response.data.success && response.data.user) {
-        const user = response.data.user;
-        // Clear any legacy unscoped mock caches on fresh login
-        localStorage.removeItem('influenceai_campaigns');
-        localStorage.removeItem('influenceai_rec_history');
-        localStorage.removeItem('influenceai_saved');
-        localStorage.removeItem('influenceai_inquiries');
+      // 1. Authenticate with Supabase Auth (establishes client JWT and session)
+      const { data: supaAuth, error: supaErr } = await supabase.auth.signInWithPassword({
+        email: cleanEmail,
+        password,
+      });
 
-        localStorage.setItem('influenceai_user', JSON.stringify(user));
-        localStorage.setItem('influenceai_role', user.role || role);
-        return user;
+      if (supaErr) {
+        throw new Error(supaErr.message);
       }
-      throw new Error(response.data?.message || 'Authentication failed. Please register an account first.');
+
+      if (supaAuth.session) {
+        localStorage.setItem('influenceai_token', supaAuth.session.access_token);
+      }
+
+      // 2. Clear any legacy unscoped mock caches on fresh login
+      localStorage.removeItem('influenceai_campaigns');
+      localStorage.removeItem('influenceai_rec_history');
+      localStorage.removeItem('influenceai_saved');
+      localStorage.removeItem('influenceai_inquiries');
+
+      // 3. Fetch profile record from backend
+      let user = null;
+      try {
+        const response = await api.post('/auth/login', { email: cleanEmail, password, role });
+        if (response.data && response.data.success && response.data.user) {
+          user = response.data.user;
+        }
+      } catch (backendErr) {
+        console.warn('Backend profile sync notice:', backendErr.message);
+      }
+
+      if (!user) {
+        const supaUser = supaAuth.user;
+        const metaRole = supaUser.user_metadata?.role;
+        const normalizedRole = (metaRole === 'influencer' || role === 'Influencer') ? 'Influencer' : 'Company';
+        user = {
+          email: supaUser.email,
+          role: normalizedRole,
+          name: supaUser.user_metadata?.brandName || supaUser.user_metadata?.fullName || (normalizedRole === 'Company' ? 'Brand Partner' : 'Creator'),
+          userId: supaUser.id,
+          id: supaUser.id,
+        };
+      }
+
+      // Ensure userId matches Supabase UID
+      if (supaAuth.user?.id) {
+        user.userId = supaAuth.user.id;
+      }
+
+      localStorage.setItem('influenceai_user', JSON.stringify(user));
+      localStorage.setItem('influenceai_role', user.role || role);
+      return user;
     } catch (err) {
       if (err.response && err.response.data && err.response.data.message) {
         throw new Error(err.response.data.message);
@@ -75,6 +115,29 @@ export const authService = {
     const currentUser = authService.getCurrentUser();
     if (currentUser && currentUser.email && currentUser.email.trim().toLowerCase() === cleanEmail) {
       throw new Error('This email is already logged in and registered. Signup denied — please use a different email address.');
+    }
+
+    // 1. Sign up in Supabase Auth with metadata
+    try {
+      const { data: supaAuth, error: supaErr } = await supabase.auth.signUp({
+        email: cleanEmail,
+        password: formData.password,
+        options: {
+          data: {
+            role: 'brand',
+            brandName: formData.brandName || formData.companyName,
+            display_role: 'Company'
+          }
+        }
+      });
+      if (supaErr && !supaErr.message.includes('already registered')) {
+        console.warn('Supabase Auth signUp notice:', supaErr.message);
+      }
+      if (supaAuth?.session?.access_token) {
+        localStorage.setItem('influenceai_token', supaAuth.session.access_token);
+      }
+    } catch (authErr) {
+      console.warn('Supabase auth signup notice:', authErr.message);
     }
 
     const payload = {
@@ -136,6 +199,30 @@ export const authService = {
       throw new Error('This email is already logged in and registered. Signup denied — please use a different email address.');
     }
 
+    // 1. Sign up in Supabase Auth with metadata
+    try {
+      const { data: supaAuth, error: supaErr } = await supabase.auth.signUp({
+        email: cleanEmail,
+        password: formData.password,
+        options: {
+          data: {
+            role: 'influencer',
+            fullName: formData.fullName,
+            display_role: 'Influencer',
+            avatar: formData.avatar || ''
+          }
+        }
+      });
+      if (supaErr && !supaErr.message.includes('already registered')) {
+        console.warn('Supabase Auth signUp notice:', supaErr.message);
+      }
+      if (supaAuth?.session?.access_token) {
+        localStorage.setItem('influenceai_token', supaAuth.session.access_token);
+      }
+    } catch (authErr) {
+      console.warn('Supabase auth signup notice:', authErr.message);
+    }
+
     const payload = {
       fullName: formData.fullName,
       creatorName: formData.creatorName || formData.fullName,
@@ -144,7 +231,10 @@ export const authService = {
       stateUT: formData.state || 'Karnataka',
       businessEmail: cleanEmail,
       password: formData.password,
-      termsAccepted: true
+      termsAccepted: true,
+      avatar: formData.avatar || null,
+      subscribers: formData.subscribers || 0,
+      avgViews: formData.avgViews || 0
     };
 
     try {
@@ -154,6 +244,7 @@ export const authService = {
       }
 
       const userId = response.data.userId;
+      const avatarUrl = formData.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(formData.creatorName || formData.fullName)}&background=6366f1&color=fff&size=200`;
       const user = {
         email: cleanEmail,
         role: 'Influencer',
@@ -162,14 +253,15 @@ export const authService = {
         handle: formData.channelHandle || '@creator',
         primaryPlatform: formData.primaryPlatform || 'YouTube',
         category: formData.category || 'Technology',
-        avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(formData.creatorName || formData.fullName)}&background=6366f1&color=fff&size=200`,
+        avatar: avatarUrl,
+        thumbnail_url: avatarUrl,
         city: formData.city || '',
         state: formData.state || 'Karnataka',
         country: 'India',
         language: formData.language || 'English & Hindi',
-        bio: '',
-        subscribers: 0,
-        avgViews: 0,
+        bio: formData.description || '',
+        subscribers: Number(formData.subscribers || 0),
+        avgViews: Number(formData.avgViews || 0),
         engagementRate: 0,
         priceRates: { starting: 0, dedicated: 0, integrated: 0, short: 0 },
         userId
@@ -196,7 +288,6 @@ export const authService = {
       const userStr = localStorage.getItem('influenceai_user');
       if (!userStr) return null;
       const parsed = JSON.parse(userStr);
-      // Reject old hardcoded mock user IDs so stale browser storage forces a clean login
       if (
         !parsed.userId ||
         parsed.userId === 'a0000000-0000-0000-0000-000000000001' ||
@@ -224,9 +315,15 @@ export const authService = {
     return updatedUser;
   },
 
-  logout: () => {
+  logout: async () => {
+    try {
+      await supabase.auth.signOut();
+    } catch (e) {
+      console.warn('Sign out notice:', e.message);
+    }
     localStorage.removeItem('influenceai_user');
     localStorage.removeItem('influenceai_role');
+    localStorage.removeItem('influenceai_token');
     localStorage.removeItem('influenceai_campaigns');
     localStorage.removeItem('influenceai_rec_history');
     localStorage.removeItem('influenceai_saved');
@@ -237,3 +334,5 @@ export const authService = {
     return authService.getCurrentUser() !== null;
   }
 };
+
+export { buildSafeYoutubeUrl } from './influencerService';

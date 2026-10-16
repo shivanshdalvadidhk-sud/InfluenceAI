@@ -47,49 +47,80 @@ const loginUser = async (req, res) => {
     }
 
     const authUserId = authData.user.id;
-    let detailsData = null;
+    const metadataRole = authData.user.user_metadata?.role; // 'brand' or 'influencer'
 
-    // 2. Verify registered record exists for the selected role
-    if (targetAccountType === 'brand') {
-      const { data: byIdRows } = await supabase
+    // 2. Automatically detect account type (Brand or Influencer)
+    let detectedAccountType = null;
+    if (metadataRole === 'brand' || role === 'Company' || role === 'brand') {
+      detectedAccountType = 'brand';
+    } else if (metadataRole === 'influencer' || role === 'Influencer' || role === 'influencer') {
+      detectedAccountType = 'influencer';
+    }
+
+    // Check profiles table if still unknown
+    if (!detectedAccountType) {
+      const { data: profileRow } = await supabase
+        .from('profiles')
+        .select('account_type')
+        .eq('id', authUserId)
+        .maybeSingle();
+
+      if (profileRow?.account_type) {
+        detectedAccountType = profileRow.account_type;
+      }
+    }
+
+    // Check brands table
+    let brandData = null;
+    if (detectedAccountType === 'brand' || !detectedAccountType) {
+      const { data: bRows } = await supabase
         .from('brands')
         .select('*')
-        .eq('user_id', authUserId)
+        .or(`user_id.eq.${authUserId},email.ilike.${cleanEmail}`)
         .limit(1);
+      if (bRows && bRows.length > 0) {
+        brandData = bRows[0];
+        detectedAccountType = 'brand';
+      }
+    }
 
-      if (byIdRows && byIdRows.length > 0) {
-        detailsData = byIdRows[0];
+    // Check influencers / registered_channels table
+    let influencerData = null;
+    if (detectedAccountType === 'influencer' || !detectedAccountType) {
+      const { data: iRows } = await supabase
+        .from('influencers')
+        .select('*')
+        .or(`user_id.eq.${authUserId},email.ilike.${cleanEmail}`)
+        .limit(1);
+      if (iRows && iRows.length > 0) {
+        influencerData = iRows[0];
+        detectedAccountType = 'influencer';
       } else {
-        const { data: byEmailRows } = await supabase
-          .from('brands')
+        const { data: regRows } = await supabase
+          .from('registered_channels')
           .select('*')
-          .ilike('email', cleanEmail)
+          .eq('user_id', authUserId)
           .limit(1);
-        if (byEmailRows && byEmailRows.length > 0) {
-          detailsData = byEmailRows[0];
+        if (regRows && regRows.length > 0) {
+          detectedAccountType = 'influencer';
         }
       }
+    }
 
-      if (!detailsData) {
-        return res.status(403).json({
-          success: false,
-          message: 'No registered Brand/Company account found for this email. Please sign up as a Brand first.'
-        });
-      }
-
+    if (detectedAccountType === 'brand') {
       const responseUser = {
         email: cleanEmail,
         role: 'Company',
-        name: detailsData.company_name || detailsData.brand_name,
-        brandName: detailsData.brand_name || detailsData.company_name,
-        industry: detailsData.industry_category || 'General',
-        city: detailsData.headquarters_city || 'India',
-        state: detailsData.state_ut || 'India',
+        name: brandData?.company_name || brandData?.brand_name || authData.user.user_metadata?.brandName || 'Brand Partner',
+        brandName: brandData?.brand_name || brandData?.company_name || authData.user.user_metadata?.brandName || 'Brand Partner',
+        industry: brandData?.industry_category || 'General',
+        city: brandData?.headquarters_city || 'India',
+        state: brandData?.state_ut || 'India',
         country: 'India',
-        website: detailsData.brand_website || '',
-        description: detailsData.description || '',
-        established: detailsData.established || '2026',
-        userId: detailsData.user_id || authUserId
+        website: brandData?.brand_website || '',
+        description: brandData?.description || '',
+        established: brandData?.established || '2026',
+        userId: brandData?.user_id || authUserId
       };
 
       return res.status(200).json({
@@ -98,47 +129,22 @@ const loginUser = async (req, res) => {
         user: responseUser
       });
     } else {
-      const { data: byIdRows } = await supabase
-        .from('influencers')
-        .select('*')
-        .eq('user_id', authUserId)
-        .limit(1);
-
-      if (byIdRows && byIdRows.length > 0) {
-        detailsData = byIdRows[0];
-      } else {
-        const { data: byEmailRows } = await supabase
-          .from('influencers')
-          .select('*')
-          .ilike('email', cleanEmail)
-          .limit(1);
-        if (byEmailRows && byEmailRows.length > 0) {
-          detailsData = byEmailRows[0];
-        }
-      }
-
-      if (!detailsData) {
-        return res.status(403).json({
-          success: false,
-          message: 'No registered Influencer/Creator account found for this email. Please sign up as an Influencer first.'
-        });
-      }
-
+      // Default to Influencer
       const responseUser = {
         email: cleanEmail,
         role: 'Influencer',
-        name: detailsData.full_name || detailsData.creator_name,
-        creatorName: detailsData.creator_name || detailsData.full_name,
-        handle: detailsData.youtube_handle || '@creator',
-        category: detailsData.content_niche_category || 'General',
-        state: detailsData.state_ut || 'India',
+        name: influencerData?.full_name || influencerData?.creator_name || authData.user.user_metadata?.fullName || 'Creator',
+        creatorName: influencerData?.creator_name || influencerData?.full_name || authData.user.user_metadata?.creatorName || 'Creator',
+        handle: influencerData?.youtube_handle || '@creator',
+        category: influencerData?.content_niche_category || 'General',
+        state: influencerData?.state_ut || 'India',
         country: 'India',
-        bio: detailsData.bio || '',
-        subscribers: Number(detailsData.subscribers || 0),
-        avgViews: Number(detailsData.avg_views || 0),
-        engagementRate: Number(detailsData.engagement_rate || 0),
-        avatar: detailsData.avatar || '',
-        userId: detailsData.user_id || authUserId
+        bio: influencerData?.bio || '',
+        subscribers: Number(influencerData?.subscribers || 0),
+        avgViews: Number(influencerData?.avg_views || 0),
+        engagementRate: Number(influencerData?.engagement_rate || 0),
+        avatar: influencerData?.avatar || '',
+        userId: influencerData?.user_id || authUserId
       };
 
       return res.status(200).json({

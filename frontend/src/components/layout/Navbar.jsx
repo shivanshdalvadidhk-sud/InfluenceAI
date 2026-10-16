@@ -218,7 +218,8 @@ const Navbar = ({ onMenuToggle }) => {
         </div>
       </div>
 
-      {/* Search Bar Container */}
+      {/* Search Bar Container - only visible to Brand/Company */}
+      {role === 'Company' && (
       <div style={{ position: 'relative', width: '380px' }} ref={dropdownRef} className="navbar-search">
         <form onSubmit={handleSearchSubmit}>
           <div
@@ -328,6 +329,7 @@ const Navbar = ({ onMenuToggle }) => {
           </div>
         )}
       </div>
+      )}
 
       {/* User Actions */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>

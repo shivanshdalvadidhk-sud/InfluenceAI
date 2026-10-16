@@ -86,6 +86,11 @@ def load_channels(
     # Avoid SQL errors if an optional field is absent.
     optional_columns = [
         "video_count",
+        "comment_sentiment_score",
+        "dominant_sentiment",
+        "positive_comment_count",
+        "neutral_comment_count",
+        "negative_comment_count",
     ]
 
     selected_columns = [
@@ -130,6 +135,11 @@ def load_channels(
                 "thumbnail_url": "",
                 "profile_text": "",
                 "profile_embedding": None,
+                "comment_sentiment_score": 0.5,
+                "dominant_sentiment": "neutral",
+                "positive_comment_count": 0,
+                "neutral_comment_count": 0,
+                "negative_comment_count": 0,
             }
 
             for column, default in defaults.items():

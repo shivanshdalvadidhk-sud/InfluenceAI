@@ -65,18 +65,24 @@ const DashboardLayout = ({ allowedRole }) => {
 
     setSendingInquiry(true);
     try {
+      const creatorName = selectedCreator.channel_name || selectedCreator.name || 'Creator';
+      const channelId = selectedCreator.channel_id || (selectedCreator.id && String(selectedCreator.id).startsWith('UC') ? selectedCreator.id : null);
+      const creatorAvatar = selectedCreator.thumbnail_url || selectedCreator.avatar || null;
+      const creatorHandle = selectedCreator.channel_url || selectedCreator.handle || (channelId ? `@${channelId}` : '');
+
       await influencerService.sendInquiry({
-        influencerId: selectedCreator.id,
-        influencerName: selectedCreator.name,
-        influencerHandle: selectedCreator.handle,
-        influencerAvatar: selectedCreator.avatar,
+        influencerId: selectedCreator.id || channelId,
+        channelId: channelId,
+        influencerName: creatorName,
+        influencerHandle: creatorHandle,
+        influencerAvatar: creatorAvatar,
         campaignId: selectedCampaignId,
         campaignName: campaigns.find((c) => c.id === selectedCampaignId)?.name || 'Campaign Launch',
         budget: customInquiryBudget,
         budgetStr: `₹${(Number(customInquiryBudget) || 0).toLocaleString('en-IN')}`,
         deliverables: inquiryDeliverables
       });
-      showToast(`Inquiry dispatched to ${selectedCreator.name}!`, 'success');
+      showToast(`Inquiry dispatched to ${creatorName}!`, 'success');
       setOpenInquiry(false);
     } catch (err) {
       showToast('Error sending inquiry.', 'error');

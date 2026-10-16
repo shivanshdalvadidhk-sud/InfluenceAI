@@ -10,6 +10,7 @@ const campaignRoutes = require("./routes/campaignRoutes");
 const influencerRoutes = require("./routes/influencerRoutes");
 const recommendationRoutes = require("./routes/recommendationRoutes");
 const seedRoutes = require("./routes/seedRoutes");
+const channelRoutes = require("./routes/channelRoutes");
 
 const app = express();
 
@@ -54,6 +55,7 @@ app.use("/api/campaigns", campaignRoutes);
 app.use("/api/influencers", influencerRoutes);
 app.use("/api/recommendations", recommendationRoutes);
 app.use("/api/seed", seedRoutes);
+app.use("/api/channels", channelRoutes);
 
 // Health check route
 app.get("/", (req, res) => {
@@ -109,7 +111,7 @@ const ensureAiEngineRunning = async () => {
 
   const engineDir = path.resolve(__dirname, "../influencer_recommendation_engine_code");
   console.log("Starting Python AI Recommendation Engine on http://127.0.0.1:8000...");
-  const aiProc = spawn("python", ["-m", "uvicorn", "app:app", "--host", "127.0.0.1", "--port", "8000"], {
+  const aiProc = spawn("python", ["-m", "uvicorn", "app:app", "--host", "127.0.0.1", "--port", "8000", "--reload"], {
     cwd: engineDir,
     stdio: "inherit",
     shell: false

@@ -1,13 +1,48 @@
 const supabase = require('../config/supabase');
 const { formatChannelRecommendation } = require('./recommendationController');
 
+// Bulletproof YouTube URL formatter - prevents double prefixing
+function formatYoutubeUrl(handleOrUrl, channelId = null) {
+  const raw = String(handleOrUrl || '').trim();
+  if (!raw && !channelId) return 'https://www.youtube.com';
+
+  // If there's duplicate/nested http prefix (e.g. https://www.youtube.com/@https://...)
+  if (raw.includes('http') && raw.indexOf('http') !== raw.lastIndexOf('http')) {
+    const lastHttpIdx = raw.lastIndexOf('http');
+    return raw.slice(lastHttpIdx).trim();
+  }
+
+  // If already an absolute http URL
+  if (raw.startsWith('http://') || raw.startsWith('https://')) {
+    return raw.replace(/youtube\.com\/@https?:\/\//i, 'youtube.com/@');
+  }
+
+  if (channelId && String(channelId).startsWith('UC')) {
+    return `https://www.youtube.com/channel/${channelId}`;
+  }
+
+  if (raw.startsWith('UC') && raw.length >= 20) {
+    return `https://www.youtube.com/channel/${raw}`;
+  }
+
+  if (raw.startsWith('@')) {
+    return `https://www.youtube.com/${raw}`;
+  }
+
+  if (raw) {
+    return `https://www.youtube.com/@${raw}`;
+  }
+
+  return channelId ? `https://www.youtube.com/channel/${channelId}` : 'https://www.youtube.com';
+}
+
 // Helper to map a row from public.ml_channels into a unified influencer object
 function mapMlChannelToInfluencer(ch, aiRecOverride = null) {
   const rec = aiRecOverride || {
     rank: 1,
     channel_id: ch.channel_id,
     channel_name: ch.title || ch.channel_id,
-    channel_url: ch.channel_url || `https://www.youtube.com/channel/${ch.channel_id}`,
+    channel_url: formatYoutubeUrl(ch.channel_url, ch.channel_id),
     thumbnail_url: ch.thumbnail_url,
     category: ch.category,
     country: ch.country,
@@ -46,39 +81,42 @@ const getInfluencers = async (req, res) => {
     ]);
 
     const mappedMl = (mlChannels || []).map((ch) => mapMlChannelToInfluencer(ch));
-    const mappedDb = (dbInfluencers || []).map((inf) => ({
-      id: inf.id.toString(),
-      channel_id: inf.id.toString(),
-      name: inf.full_name,
-      channel_name: inf.creator_name || inf.full_name,
-      creatorName: inf.creator_name,
-      handle: inf.youtube_handle,
-      category: inf.content_niche_category,
-      country: 'IN',
-      state: inf.state_ut,
-      tier: (inf.subscribers || 50000) >= 1000000 ? 'macro' : (inf.subscribers || 50000) >= 100000 ? 'mid' : (inf.subscribers || 50000) >= 10000 ? 'micro' : 'nano',
-      bio: inf.bio || 'Verified content creator.',
-      platform: inf.primary_platform || 'YouTube',
-      primaryPlatform: inf.primary_platform || 'YouTube',
-      subscribers: Number(inf.subscribers || 50000),
-      subscriber_count: Number(inf.subscribers || 50000),
-      avgViews: Number(inf.avg_views || 15000),
-      view_count: Number(inf.avg_views || 15000),
-      engagementRate: Number(inf.engagement_rate || 4.8),
-      engagement_rate: Number(inf.engagement_rate || 4.8) / 100,
-      graphScore: Number(inf.graph_score || 85),
-      finalScore: Number(inf.graph_score || 85),
-      recommendation_score: Number(inf.graph_score || 85) / 100,
-      semantic_similarity: 0.85,
-      engagement_score: 0.82,
-      budget_fit: 'verified',
-      reasons: ['Verified platform creator'],
-      estimatedCost: Number(inf.estimated_cost || 95000),
-      avatar: inf.avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100',
-      thumbnail_url: inf.avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100',
-      profileUrl: `https://www.youtube.com/${String(inf.youtube_handle || '').startsWith('@') ? inf.youtube_handle : '@' + (inf.youtube_handle || 'youtube')}`,
-      channel_url: `https://www.youtube.com/${String(inf.youtube_handle || '').startsWith('@') ? inf.youtube_handle : '@' + (inf.youtube_handle || 'youtube')}`
-    }));
+    const mappedDb = (dbInfluencers || []).map((inf) => {
+      const safeUrl = formatYoutubeUrl(inf.youtube_handle, inf.id);
+      return {
+        id: inf.id.toString(),
+        channel_id: inf.id.toString(),
+        name: inf.full_name,
+        channel_name: inf.creator_name || inf.full_name,
+        creatorName: inf.creator_name,
+        handle: String(inf.youtube_handle || '').startsWith('@') ? inf.youtube_handle : `@${String(inf.youtube_handle || '').replace(/^https?:\/\/(?:www\.)?youtube\.com\/@?/i, '')}`,
+        category: inf.content_niche_category,
+        country: 'IN',
+        state: inf.state_ut,
+        tier: (inf.subscribers || 50000) >= 1000000 ? 'macro' : (inf.subscribers || 50000) >= 100000 ? 'mid' : (inf.subscribers || 50000) >= 10000 ? 'micro' : 'nano',
+        bio: inf.bio || 'Verified content creator.',
+        platform: inf.primary_platform || 'YouTube',
+        primaryPlatform: inf.primary_platform || 'YouTube',
+        subscribers: Number(inf.subscribers || 50000),
+        subscriber_count: Number(inf.subscribers || 50000),
+        avgViews: Number(inf.avg_views || 15000),
+        view_count: Number(inf.avg_views || 15000),
+        engagementRate: Number(inf.engagement_rate || 4.8),
+        engagement_rate: Number(inf.engagement_rate || 4.8) / 100,
+        graphScore: Number(inf.graph_score || 85),
+        finalScore: Number(inf.graph_score || 85),
+        recommendation_score: Number(inf.graph_score || 85) / 100,
+        semantic_similarity: 0.85,
+        engagement_score: 0.82,
+        budget_fit: 'verified',
+        reasons: ['Verified platform creator'],
+        estimatedCost: Number(inf.estimated_cost || 95000),
+        avatar: inf.avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100',
+        thumbnail_url: inf.avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100',
+        profileUrl: safeUrl,
+        channel_url: safeUrl
+      };
+    });
 
     return res.status(200).json({
       success: true,
@@ -169,8 +207,8 @@ const getInfluencerById = async (req, res) => {
             estimatedCost: Number(influencer.estimated_cost || 95000),
             avatar: influencer.avatar,
             thumbnail_url: influencer.avatar,
-            profileUrl: `https://www.youtube.com/${String(influencer.youtube_handle || '').startsWith('@') ? influencer.youtube_handle : '@' + (influencer.youtube_handle || 'youtube')}`,
-            channel_url: `https://www.youtube.com/${String(influencer.youtube_handle || '').startsWith('@') ? influencer.youtube_handle : '@' + (influencer.youtube_handle || 'youtube')}`
+            profileUrl: formatYoutubeUrl(influencer.youtube_handle, influencer.id),
+            channel_url: formatYoutubeUrl(influencer.youtube_handle, influencer.id)
           }
         });
       }
@@ -279,29 +317,70 @@ const updateInfluencerProfile = async (req, res) => {
 };
 
 // Save inquiry / application to database
+// Save inquiry / application to database
 const sendInquiry = async (req, res) => {
   try {
-    const { companyId, influencerId, campaignId, campaignName, companyName, deliverables, message, bidAmount, creatorId } = req.body;
+    const {
+      companyId,
+      influencerId,
+      campaignId,
+      campaignName,
+      companyName,
+      brandEmail,
+      deliverables,
+      message,
+      bidAmount,
+      creatorId,
+      influencerName,
+      influencerHandle,
+      influencerAvatar
+    } = req.body;
 
-    const targetInfluencerId = (influencerId || creatorId || 'rohan-mehta').toString();
-    const targetCompanyId = (companyId && companyId.includes('-') && !companyId.startsWith('google-')) ? companyId : 'a0000000-0000-0000-0000-000000000001';
+    const rawTargetId = (influencerId || creatorId || 'rohan-mehta').toString();
+    const targetCompanyId = (companyId && companyId.includes('-') && !companyId.startsWith('google-'))
+      ? companyId
+      : 'a0000000-0000-0000-0000-000000000001';
     const targetCampaignId = campaignId ? String(campaignId) : null;
+
+    let targetInfluencerUserId = rawTargetId;
+    let targetChannelId = rawTargetId.startsWith('UC') ? rawTargetId : null;
+
+    // Check if channel is registered in registered_channels table
+    try {
+      const { data: regRows } = await supabase
+        .from('registered_channels')
+        .select('user_id, youtube_channel_id, channel_title, thumbnail_url')
+        .or(`youtube_channel_id.eq.${rawTargetId},user_id.eq.${rawTargetId.includes('-') ? rawTargetId : '00000000-0000-0000-0000-000000000000'}`)
+        .limit(1);
+
+      if (regRows && regRows.length > 0) {
+        targetInfluencerUserId = regRows[0].user_id;
+        targetChannelId = regRows[0].youtube_channel_id;
+      }
+    } catch (_) {}
 
     await supabase.from('profiles').upsert({ id: targetCompanyId, account_type: 'brand' });
 
+    const insertPayload = {
+      company_id: targetCompanyId,
+      influencer_id: targetInfluencerUserId,
+      campaign_id: targetCampaignId,
+      campaign_name: campaignName || 'Sponsorship Campaign Proposal',
+      company_name: companyName || 'Brand Partner',
+      brand_email: brandEmail || null,
+      influencer_name: influencerName || null,
+      influencer_handle: influencerHandle || null,
+      influencer_avatar: influencerAvatar || null,
+      youtube_channel_id: targetChannelId || rawTargetId,
+      deliverables: Array.isArray(deliverables) ? deliverables.join(', ') : (deliverables || 'Dedicated Video'),
+      message: message || '',
+      bid_amount: bidAmount ? Number(bidAmount) : null,
+      status: 'Pending'
+    };
+
     const { data: inquiry, error } = await supabase
       .from('inquiries')
-      .insert({
-        company_id: targetCompanyId,
-        influencer_id: targetInfluencerId,
-        campaign_id: targetCampaignId,
-        campaign_name: campaignName || 'Sponsorship Campaign',
-        company_name: companyName || 'Brand Partner',
-        deliverables: Array.isArray(deliverables) && deliverables.length > 0 ? deliverables : ['Dedicated Video'],
-        message: message || '',
-        bid_amount: bidAmount ? Number(bidAmount) : null,
-        status: 'New'
-      })
+      .insert(insertPayload)
       .select()
       .single();
 
@@ -317,45 +396,77 @@ const sendInquiry = async (req, res) => {
   }
 };
 
-// Get inquiries scoped to user
+// Get inquiries scoped to user (brand or influencer)
 const getInquiries = async (req, res) => {
   try {
     const { companyId, influencerId } = req.query;
-    let query = supabase
-      .from('inquiries')
-      .select('*')
-      .order('created_at', { ascending: false });
 
     if (companyId && companyId !== 'undefined' && companyId !== 'null') {
-      query = query.eq('company_id', String(companyId));
-    } else if (influencerId && influencerId !== 'undefined' && influencerId !== 'null') {
-      query = query.eq('influencer_id', String(influencerId));
-    } else {
-      return res.status(200).json({ success: true, inquiries: [] });
+      const { data: inquiries, error } = await supabase
+        .from('inquiries')
+        .select('*')
+        .eq('company_id', String(companyId))
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        return res.status(200).json({ success: true, inquiries: [] });
+      }
+      return res.status(200).json({ success: true, inquiries: inquiries || [] });
     }
 
-    const { data: inquiries, error } = await query;
+    if (influencerId && influencerId !== 'undefined' && influencerId !== 'null') {
+      const targetId = String(influencerId);
 
-    if (error) {
-      return res.status(200).json({ success: true, inquiries: [] });
+      // Look up any registered channel ID for this influencer
+      let channelId = null;
+      try {
+        const { data: regRows } = await supabase
+          .from('registered_channels')
+          .select('youtube_channel_id')
+          .eq('user_id', targetId)
+          .limit(1);
+
+        if (regRows && regRows.length > 0) {
+          channelId = regRows[0].youtube_channel_id;
+        }
+      } catch (_) {}
+
+      let query = supabase.from('inquiries').select('*');
+      if (channelId) {
+        query = query.or(`influencer_id.eq.${targetId},youtube_channel_id.eq.${channelId}`);
+      } else {
+        query = query.eq('influencer_id', targetId);
+      }
+
+      const { data: inquiries, error } = await query.order('created_at', { ascending: false });
+      if (error) {
+        return res.status(200).json({ success: true, inquiries: [] });
+      }
+      return res.status(200).json({ success: true, inquiries: inquiries || [] });
     }
 
-    return res.status(200).json({ success: true, inquiries: inquiries || [] });
+    return res.status(200).json({ success: true, inquiries: [] });
   } catch (err) {
     console.error("getInquiries error:", err);
     return res.status(500).json({ success: false, message: "Internal server error" });
   }
 };
 
-// Update inquiry status
+// Update inquiry status (influencer accepts or declines)
 const updateInquiryStatus = async (req, res) => {
   try {
     const { id } = req.params;
     const { status } = req.body;
 
+    const normalizedStatus = (status === 'Interested' || status === 'accept' || status === 'accepted' || status === 'Accept')
+      ? 'Accepted'
+      : (status === 'decline' || status === 'declined' || status === 'Decline')
+      ? 'Declined'
+      : status;
+
     const { data: updated, error } = await supabase
       .from('inquiries')
-      .update({ status })
+      .update({ status: normalizedStatus })
       .eq('id', id)
       .select()
       .single();
@@ -492,8 +603,8 @@ const getSavedInfluencers = async (req, res) => {
             recommendation_score: Number(inf.graph_score || 85) / 100,
             avatar: inf.avatar,
             thumbnail_url: inf.avatar,
-            profileUrl: `https://www.youtube.com/${String(inf.youtube_handle || '').startsWith('@') ? inf.youtube_handle : '@' + (inf.youtube_handle || 'youtube')}`,
-            channel_url: `https://www.youtube.com/${String(inf.youtube_handle || '').startsWith('@') ? inf.youtube_handle : '@' + (inf.youtube_handle || 'youtube')}`
+            profileUrl: formatYoutubeUrl(inf.youtube_handle, inf.id),
+            channel_url: formatYoutubeUrl(inf.youtube_handle, inf.id)
           });
         });
       }

@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { authService } from '../../services/authService';
+import api from '../../services/api';
 import { showToast } from '../../components/common/Toast';
 import { INDIAN_STATES, INDIAN_CITIES, INDIAN_CITIES_BY_STATE } from '../../data/mockData';
-import { Eye, EyeOff, ShieldCheck, Mail, Lock, User, Building, Globe, MapPin, AlertCircle } from 'lucide-react';
+import { Eye, EyeOff, ShieldCheck, Mail, Lock, User, Building, Globe, MapPin, AlertCircle, Video, CheckCircle2, RefreshCw } from 'lucide-react';
 
 const Register = () => {
   const navigate = useNavigate();
@@ -27,7 +28,11 @@ const Register = () => {
   const [creatorName, setCreatorName] = useState('');
   const [category, setCategory] = useState('Technology');
   const [channelHandle, setChannelHandle] = useState('');
+  const [channelLinkOrId, setChannelLinkOrId] = useState('');
   const [creatorState, setCreatorState] = useState('Karnataka');
+  const [channelPreview, setChannelPreview] = useState(null);
+  const [fetchingPreview, setFetchingPreview] = useState(false);
+  const [previewError, setPreviewError] = useState('');
 
   const [showPassword, setShowPassword] = useState(false);
   const [agreeTerms, setAgreeTerms] = useState(false);
@@ -74,6 +79,57 @@ const Register = () => {
       }
     }
   };
+
+  const fetchChannelPreview = async (inputVal) => {
+    const raw = String(inputVal || '').trim();
+    if (!raw || raw.length < 3) {
+      setChannelPreview(null);
+      setPreviewError('');
+      return;
+    }
+
+    setFetchingPreview(true);
+    setPreviewError('');
+    try {
+      const res = await api.get(`/channels/preview?input=${encodeURIComponent(raw)}`);
+      if (res.data?.success && res.data.channel) {
+        const ch = res.data.channel;
+        setChannelPreview(ch);
+        setPreviewError('');
+
+        // Auto-populate creator details
+        if (ch.channel_title) {
+          setCreatorName(ch.channel_title);
+          if (!fullName) setFullName(ch.channel_title);
+        }
+        if (ch.custom_url) {
+          setChannelHandle(ch.custom_url.startsWith('@') ? ch.custom_url : `@${ch.custom_url}`);
+        } else if (ch.channel_id) {
+          setChannelHandle(ch.channel_id);
+        }
+        if (ch.category && creatorCategories.includes(ch.category)) {
+          setCategory(ch.category);
+        }
+      } else {
+        setPreviewError('Channel not found or YouTube API did not return data for this input.');
+      }
+    } catch (err) {
+      const msg = err.response?.data?.detail || err.response?.data?.message || err.message;
+      setPreviewError(msg || 'Could not fetch channel details.');
+    } finally {
+      setFetchingPreview(false);
+    }
+  };
+
+  useEffect(() => {
+    if (role !== 'Influencer') return;
+    const timer = setTimeout(() => {
+      if (channelLinkOrId.trim().length >= 3) {
+        fetchChannelPreview(channelLinkOrId);
+      }
+    }, 600);
+    return () => clearTimeout(timer);
+  }, [channelLinkOrId, role]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -126,20 +182,25 @@ const Register = () => {
         showToast('Company account registered successfully!', 'success');
         navigate('/company/dashboard');
       } else {
+        const finalHandle = (channelHandle || channelPreview?.custom_url || channelPreview?.channel_id || channelLinkOrId).trim();
+        const finalCreatorName = (creatorName || channelPreview?.channel_title || fullName || 'Creator').trim();
         const data = { 
           email: cleanEmail, 
           password, 
-          fullName: fullName.trim(), 
-          creatorName: creatorName.trim(), 
+          fullName: (fullName || finalCreatorName).trim(), 
+          creatorName: finalCreatorName, 
           primaryPlatform: 'YouTube', 
           category, 
           language: 'English',
-          channelHandle: channelHandle.trim(), 
+          channelHandle: finalHandle, 
+          avatar: channelPreview?.thumbnail_url || null,
+          subscribers: Number(channelPreview?.subscriber_count || 0),
+          avgViews: channelPreview?.view_count ? Math.round(Number(channelPreview.view_count) / Math.max(1, Number(channelPreview.video_count || 50))) : 0,
           city: '',
           state: creatorState 
         };
         await authService.registerInfluencer(data);
-        showToast('Creator account registered successfully!', 'success');
+        showToast('Creator account registered successfully with YouTube avatar!', 'success');
         navigate('/influencer/dashboard');
       }
     } catch (err) {
@@ -406,6 +467,157 @@ const Register = () => {
           ) : (
             <>
               {/* INFLUENCER FIELDS */}
+              {/* YOUTUBE CHANNEL LINK / ID INPUT & AUTO-FETCH */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <label style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-primary)' }}>
+                    YouTube Channel Link or Channel ID *
+                  </label>
+                  {fetchingPreview && (
+                    <span style={{ fontSize: '0.72rem', color: 'var(--primary-purple)', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                      <RefreshCw size={12} style={{ animation: 'spin 1s linear infinite' }} />
+                      Fetching YouTube profile...
+                    </span>
+                  )}
+                </div>
+
+                <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <div style={{ position: 'relative', flex: 1, display: 'flex', alignItems: 'center' }}>
+                    <input
+                      type="text"
+                      placeholder="e.g. https://www.youtube.com/@AmitEdutec or UC_gtN4lepSR1ebO2fKGd85g"
+                      value={channelLinkOrId}
+                      onChange={(e) => setChannelLinkOrId(e.target.value)}
+                      onBlur={() => {
+                        if (channelLinkOrId.trim().length >= 3 && !channelPreview) {
+                          fetchChannelPreview(channelLinkOrId);
+                        }
+                      }}
+                      required
+                      style={{ width: '100%', padding: '10px 10px 10px 36px', borderRadius: '8px', border: '1px solid var(--border-color)', fontSize: '0.875rem' }}
+                    />
+                    <Video size={16} style={{ position: 'absolute', left: 12, color: 'var(--accent-red)' }} />
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => fetchChannelPreview(channelLinkOrId)}
+                    disabled={fetchingPreview || !channelLinkOrId.trim()}
+                    style={{
+                      padding: '10px 14px',
+                      borderRadius: '8px',
+                      border: '1px solid var(--border-color)',
+                      backgroundColor: 'var(--bg-app)',
+                      color: 'var(--primary-purple)',
+                      fontWeight: 700,
+                      fontSize: '0.8rem',
+                      cursor: 'pointer',
+                      whiteSpace: 'nowrap'
+                    }}
+                  >
+                    Auto Fetch
+                  </button>
+                </div>
+                <span style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>
+                  Paste your full YouTube channel link or Channel ID. Your real YouTube profile photo, title, and subscriber stats will be fetched automatically.
+                </span>
+              </div>
+
+              {/* AUTOMATIC YOUTUBE PROFILE PHOTO & CHANNEL PREVIEW CARD */}
+              {channelPreview && (
+                <div
+                  style={{
+                    backgroundColor: '#F0FDF4',
+                    border: '1px solid #BBF7D0',
+                    borderRadius: '10px',
+                    padding: '14px 16px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    flexWrap: 'wrap',
+                    gap: '12px'
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                    <div style={{ position: 'relative' }}>
+                      <img
+                        src={channelPreview.thumbnail_url}
+                        alt={channelPreview.channel_title}
+                        referrerPolicy="no-referrer"
+                        style={{
+                          width: '54px',
+                          height: '54px',
+                          borderRadius: '50%',
+                          objectFit: 'cover',
+                          border: '2px solid #22C55E'
+                        }}
+                      />
+                      <div
+                        style={{
+                          position: 'absolute',
+                          bottom: -2,
+                          right: -2,
+                          backgroundColor: '#EF4444',
+                          color: 'white',
+                          borderRadius: '50%',
+                          width: '18px',
+                          height: '18px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontSize: '10px'
+                        }}
+                      >
+                        <Video size={10} color="white" />
+                      </div>
+                    </div>
+
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <strong style={{ fontSize: '0.92rem', color: 'var(--text-primary)' }}>
+                          {channelPreview.channel_title}
+                        </strong>
+                        <CheckCircle2 size={15} color="#16A34A" />
+                      </div>
+                      <span style={{ fontSize: '0.76rem', color: 'var(--text-secondary)', display: 'block' }}>
+                        {channelPreview.custom_url || channelPreview.channel_id}
+                      </span>
+                      <span style={{ fontSize: '0.74rem', color: '#15803D', fontWeight: 600 }}>
+                        {Number(channelPreview.subscriber_count || 0).toLocaleString('en-IN')} subscribers • {Number(channelPreview.video_count || 0)} videos
+                      </span>
+                    </div>
+                  </div>
+
+                  <span
+                    style={{
+                      fontSize: '0.72rem',
+                      fontWeight: 700,
+                      backgroundColor: '#DCFCE7',
+                      color: '#15803D',
+                      padding: '4px 10px',
+                      borderRadius: '16px'
+                    }}
+                  >
+                    YouTube Profile Photo Synced
+                  </span>
+                </div>
+              )}
+
+              {previewError && (
+                <div
+                  style={{
+                    backgroundColor: '#FEF3C7',
+                    border: '1px solid #FDE68A',
+                    borderRadius: '8px',
+                    padding: '10px 12px',
+                    fontSize: '0.78rem',
+                    color: '#92400E'
+                  }}
+                >
+                  {previewError}
+                </div>
+              )}
+
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                   <label style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Full Name *</label>
@@ -440,14 +652,13 @@ const Register = () => {
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                  <label style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)' }}>YouTube Channel Handle *</label>
+                  <label style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)' }}>YouTube Channel Handle / URL</label>
                   <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
                     <input
                       type="text"
-                      placeholder="@amit_tech"
+                      placeholder="@AmitEdutec"
                       value={channelHandle}
                       onChange={(e) => setChannelHandle(e.target.value)}
-                      required
                       style={{ width: '100%', padding: '10px 10px 10px 36px', borderRadius: '8px', border: '1px solid var(--border-color)', fontSize: '0.875rem' }}
                     />
                     <Globe size={14} style={{ position: 'absolute', left: 12, color: 'var(--text-light)' }} />

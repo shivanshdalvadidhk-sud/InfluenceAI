@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import ScoreBreakdown from '../../components/common/ScoreBreakdown';
 import MatchBadge from '../../components/common/MatchBadge';
-import { influencerService } from '../../services/influencerService';
+import { influencerService, buildSafeYoutubeUrl } from '../../services/influencerService';
 import { showToast } from '../../components/common/Toast';
 import {
   Users,
@@ -81,9 +81,10 @@ const InfluencerDetail = () => {
   }
 
   const channelName = influencer.channel_name || influencer.name || 'YouTube Channel';
-  const channelUrl =
-    influencer.channel_url ||
-    (String(influencer.id).startsWith('UC') ? `https://www.youtube.com/channel/${influencer.id}` : '');
+  const channelUrl = buildSafeYoutubeUrl(
+    influencer.channel_url || influencer.profileUrl || influencer.handle,
+    influencer.id
+  );
   const fallbackAvatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(
     channelName
   )}&background=6366f1&color=fff&size=200`;

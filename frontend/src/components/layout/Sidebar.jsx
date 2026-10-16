@@ -14,6 +14,7 @@ import {
   Settings,
   LogOut,
   Mail,
+  Video as Youtube,
   X
 } from 'lucide-react';
 
@@ -81,6 +82,7 @@ const Sidebar = ({ isMobileOpen, onClose }) => {
 
   const getInfluencerMenuItems = () => [
     { name: 'Dashboard', path: '/influencer/dashboard', icon: LayoutDashboard },
+    { name: 'Register Channel', path: '/influencer/register-channel', icon: Youtube },
     { name: 'My Profile', path: '/influencer/profile', icon: User },
     { name: 'Campaign Inquiries', path: '/influencer/inquiries', icon: Mail, badge: inquiryCount },
     { name: 'Saved Opportunities', path: '/influencer/saved', icon: Bookmark },

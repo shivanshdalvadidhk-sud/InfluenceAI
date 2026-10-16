@@ -186,7 +186,10 @@ const registerInfluencer = async (req, res) => {
       stateUT,
       businessEmail,
       password,
-      termsAccepted
+      termsAccepted,
+      avatar,
+      subscribers,
+      avgViews
     } = req.body;
 
     if (!businessEmail || !password) {
@@ -232,7 +235,13 @@ const registerInfluencer = async (req, res) => {
     const { data: authData, error: authError } = await supabase.auth.admin.createUser({
       email: cleanEmail,
       password: String(password),
-      email_confirm: true
+      email_confirm: true,
+      user_metadata: {
+        role: 'influencer',
+        fullName: String(fullName).trim(),
+        creatorName: String(creatorName).trim(),
+        avatar: avatar || null
+      }
     });
 
     if (authError || !authData?.user?.id) {
@@ -261,19 +270,34 @@ const registerInfluencer = async (req, res) => {
       });
     }
 
+    // Clean youtube handle (ensure no double URLs)
+    const cleanHandle = String(youtubeHandle || '').startsWith('@')
+      ? youtubeHandle
+      : (String(youtubeHandle || '').startsWith('http')
+        ? `@${String(youtubeHandle).replace(/^https?:\/\/(?:www\.)?youtube\.com\/@?/i, '')}`
+        : `@${youtubeHandle}`);
+
     // Step 3: Insert into Influencers table
+    const insertPayload = {
+      user_id: userId,
+      email: cleanEmail,
+      full_name: String(fullName).trim(),
+      creator_name: String(creatorName).trim(),
+      youtube_handle: cleanHandle,
+      contentNicheCategory: contentNicheCategory,
+      state_ut: stateUT,
+      terms_accepted: true,
+      subscribers: subscribers ? Number(subscribers) : 0,
+      avg_views: avgViews ? Number(avgViews) : 0
+    };
+
+    if (avatar) {
+      insertPayload.avatar = avatar;
+    }
+
     const { error: influencerError } = await supabase
       .from("influencers")
-      .insert({
-        user_id: userId,
-        email: cleanEmail,
-        full_name: String(fullName).trim(),
-        creator_name: String(creatorName).trim(),
-        youtube_handle: String(youtubeHandle).trim(),
-        content_niche_category: contentNicheCategory,
-        state_ut: stateUT,
-        terms_accepted: true
-      });
+      .insert(insertPayload);
 
     if (influencerError) {
       console.error("Influencer Table Insert Error:", influencerError);
