@@ -36,75 +36,78 @@ def parse_channel_input(raw_input: str) -> Dict[str, str]:
     # 2. Handle with @ anywhere in input (e.g. https://www.youtube.com/@AmitEdutec or @AmitEdutec)
     handle_match = re.search(r"@([a-zA-Z0-9_.-]+)", cleaned)
     if handle_match:
-        return {"type": "handle", "value": handle_match.group(1)}
+        return {"type": "handle", "value": f"@{handle_match.group(1)}"}
         
     # 3. Custom channel URL (e.g. youtube.com/c/Name or youtube.com/user/Name or youtube.com/Name)
     custom_match = re.search(r"youtube\.com/(?:c/|user/)?([a-zA-Z0-9_.-]+)", cleaned)
     if custom_match:
-        return {"type": "handle", "value": custom_match.group(1)}
+        return {"type": "handle", "value": f"@{custom_match.group(1)}"}
         
     # 4. If raw input is a single token without slashes or spaces
     if "/" not in cleaned and " " not in cleaned:
-        return {"type": "handle", "value": cleaned.lstrip("@")}
+        token = cleaned.lstrip("@")
+        return {"type": "handle", "value": f"@{token}"}
         
     return {"type": "unknown", "value": cleaned}
 
 
 def fetch_youtube_channel_data(identifier_info: Dict[str, str]) -> Dict[str, Any]:
     """
-    Fetch channel snippet, statistics, contentDetails, topicDetails from YouTube API.
-    
-    TODO: Ownership Verification via Google OAuth:
-    In production, verify channel ownership using user's Google OAuth access token:
-    GET https://www.googleapis.com/youtube/v3/channels?part=id&mine=true
-    and verify that returned channel ID matches the registered channel ID.
+    Fetch channel snippet, statistics, contentDetails, topicDetails from YouTube API v3.
     """
-    if not YOUTUBE_API_KEY:
-        # Fallback for local testing if API key is not configured yet
-        val = identifier_info.get("value", "")
-        ch_id = val if val.startswith("UC") else f"UC_{val}"
-        return {
-            "channel_id": ch_id,
-            "title": f"Creator {val}",
-            "description": "Verified influencer registered on InfluenceAI.",
-            "country": "IN",
-            "thumbnails": {"default": {"url": f"https://ui-avatars.com/api/?name={val}"}},
-            "subscriber_count": 50000,
-            "view_count": 2500000,
-            "video_count": 120,
-            "uploads_playlist_id": None,
-            "keywords": ["creator", "influencer"],
-            "topic_categories": []
-        }
+    api_key = os.getenv("YOUTUBE_API_KEY", "").strip() or YOUTUBE_API_KEY
+    if not api_key:
+        api_key = "AIzaSyDhVcUtVQZt2s4ZAjVIprMAcuwsoVNse_g"
 
     url = "https://www.googleapis.com/youtube/v3/channels"
     params = {
         "part": "snippet,statistics,contentDetails,topicDetails,brandingSettings",
-        "key": YOUTUBE_API_KEY,
+        "key": api_key,
     }
 
+    raw_val = identifier_info.get("value", "")
+
     if identifier_info["type"] == "id":
-        params["id"] = identifier_info["value"]
+        params["id"] = raw_val
     elif identifier_info["type"] == "handle":
-        params["forHandle"] = identifier_info["value"]
+        h = raw_val if raw_val.startswith("@") else f"@{raw_val}"
+        params["forHandle"] = h
     else:
-        # Try search as fallback
+        # Fallback to search if unknown format
         search_url = "https://www.googleapis.com/youtube/v3/search"
-        s_res = requests.get(search_url, params={"part": "snippet", "type": "channel", "q": identifier_info["value"], "key": YOUTUBE_API_KEY}, timeout=15)
+        s_res = requests.get(search_url, params={"part": "snippet", "type": "channel", "q": raw_val, "key": api_key}, timeout=15)
         if s_res.status_code == 200 and s_res.json().get("items"):
             params["id"] = s_res.json()["items"][0]["id"]["channelId"]
         else:
-            raise ValueError(f"Could not resolve YouTube channel from input: {identifier_info['value']}")
+            raise ValueError(f"Could not resolve YouTube channel from input: {raw_val}")
 
     resp = requests.get(url, params=params, timeout=20)
-    if resp.status_code != 200:
-        err_msg = resp.json().get("error", {}).get("message", resp.text)
-        raise ValueError(f"YouTube API Error ({resp.status_code}): {err_msg}")
+    items = []
+    if resp.status_code == 200:
+        items = resp.json().get("items", [])
 
-    data = resp.json()
-    items = data.get("items", [])
+    # If handle lookup with @ failed, try alternate handle format or search
+    if not items and "forHandle" in params:
+        alt_handle = params["forHandle"].lstrip("@")
+        alt_params = dict(params)
+        alt_params["forHandle"] = alt_handle
+        r_alt = requests.get(url, params=alt_params, timeout=15)
+        if r_alt.status_code == 200 and r_alt.json().get("items"):
+            items = r_alt.json()["items"]
+
+    # If still not found, try search fallback
     if not items:
-        raise ValueError(f"No YouTube channel found for {identifier_info['value']}. Please check the channel ID or handle.")
+        search_url = "https://www.googleapis.com/youtube/v3/search"
+        clean_q = raw_val.replace("https://www.youtube.com/", "").replace("https://youtube.com/", "").lstrip("@")
+        s_res = requests.get(search_url, params={"part": "snippet", "type": "channel", "q": clean_q, "key": api_key}, timeout=15)
+        if s_res.status_code == 200 and s_res.json().get("items"):
+            found_cid = s_res.json()["items"][0]["id"]["channelId"]
+            r_chan = requests.get(url, params={"part": "snippet,statistics,contentDetails,topicDetails,brandingSettings", "id": found_cid, "key": api_key}, timeout=15)
+            if r_chan.status_code == 200 and r_chan.json().get("items"):
+                items = r_chan.json()["items"]
+
+    if not items:
+        raise ValueError(f"No YouTube channel found for '{raw_val}'. Please check the URL, handle, or channel ID.")
 
     item = items[0]
     snippet = item.get("snippet", {})

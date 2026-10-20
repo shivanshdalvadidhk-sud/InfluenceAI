@@ -56,6 +56,7 @@ export const authService = {
 
       localStorage.setItem('influenceai_user', JSON.stringify(user));
       localStorage.setItem('influenceai_role', user.role || role);
+      localStorage.setItem('influenceai_session_expires', String(Date.now() + 24 * 60 * 60 * 1000));
       return user;
     } catch (err) {
       if (err.response && err.response.data && err.response.data.message) {

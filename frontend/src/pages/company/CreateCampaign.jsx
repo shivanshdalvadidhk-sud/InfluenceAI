@@ -38,10 +38,10 @@ const CreateCampaign = () => {
 
   const getBudgetTierLabel = (val) => {
     const b = Number(val) || 0;
-    if (b < 10000) return 'Eligible Tier: Nano (< 10K subscribers)';
-    if (b < 50000) return 'Eligible Tiers: Nano & Micro (< 100K subscribers)';
-    if (b < 100000) return 'Eligible Tiers: Nano, Micro & Mid (≤ 500K subscribers)';
-    return 'Eligible Tiers: All Tiers — Nano, Micro, Mid & Macro (500K+ subscribers)';
+    if (b < 10000) return 'Eligible Tier: Nano (5K–10K subscribers)';
+    if (b < 50000) return 'Eligible Tiers: Nano & Micro (5K–100K subscribers)';
+    if (b < 100000) return 'Eligible Tiers: Nano, Micro & Mid (5K–500K subscribers)';
+    return 'Eligible Tiers: All Tiers — Nano, Micro, Mid & Macro (5K+ subscribers)';
   };
 
   const handleDeliverableToggle = (d) => {

@@ -143,9 +143,11 @@ const Recommendations = () => {
     }
   };
 
-  // Apply search, tier, subscriber filter, and sort
+  // Apply search, tier, subscriber filter, and sort (always enforces >= 5000 followers)
   useEffect(() => {
-    let result = [...influencers];
+    let result = influencers.filter(
+      (i) => Number(i.subscriber_count ?? i.subscribers ?? 0) >= 5000
+    );
 
     if (searchTerm.trim()) {
       const q = searchTerm.toLowerCase();
@@ -546,7 +548,7 @@ const Recommendations = () => {
                   style={{ padding: '10px', borderRadius: '8px', border: '1px solid var(--border-color)', fontSize: '0.85rem', minWidth: '140px', backgroundColor: 'white' }}
                 >
                   <option value="All Tiers">All Tiers</option>
-                  <option value="nano">Nano (&lt;10K)</option>
+                  <option value="nano">Nano (5K–10K)</option>
                   <option value="micro">Micro (10K–100K)</option>
                   <option value="mid">Mid (100K–500K)</option>
                   <option value="macro">Macro (500K+)</option>
@@ -558,7 +560,7 @@ const Recommendations = () => {
                   onChange={(e) => setMinSubs(e.target.value)}
                   style={{ padding: '10px', borderRadius: '8px', border: '1px solid var(--border-color)', fontSize: '0.85rem', minWidth: '150px', backgroundColor: 'white' }}
                 >
-                  <option value="Any">Min Subscribers (Any)</option>
+                  <option value="Any">Min Followers (5K+)</option>
                   <option value="10000">10K+ Subscribers</option>
                   <option value="50000">50K+ Subscribers</option>
                   <option value="100000">100K+ Subscribers</option>

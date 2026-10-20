@@ -344,8 +344,34 @@ const sendInquiry = async (req, res) => {
 
     let targetInfluencerUserId = rawTargetId;
     let targetChannelId = rawTargetId.startsWith('UC') ? rawTargetId : null;
+    let resolvedAvatar = influencerAvatar || null;
+    let resolvedName = influencerName || null;
+    let resolvedHandle = influencerHandle || null;
 
-    // Check if channel is registered in registered_channels table
+    // 1. Check if creator exists in public.influencers (by ID, user_id, or handle)
+    try {
+      const isNum = !isNaN(Number(rawTargetId));
+      let infQuery = supabase.from('influencers').select('*');
+      if (isNum) {
+        infQuery = infQuery.eq('id', Number(rawTargetId));
+      } else if (rawTargetId.includes('-')) {
+        infQuery = infQuery.eq('user_id', rawTargetId);
+      } else {
+        infQuery = infQuery.or(`youtube_handle.ilike.%${rawTargetId}%,creator_name.ilike.%${rawTargetId}%`);
+      }
+      const { data: infRows } = await infQuery.limit(1);
+      if (infRows && infRows.length > 0) {
+        const inf = infRows[0];
+        targetInfluencerUserId = inf.user_id || rawTargetId;
+        resolvedName = resolvedName || inf.creator_name || inf.full_name;
+        resolvedHandle = resolvedHandle || inf.youtube_handle;
+        resolvedAvatar = resolvedAvatar || inf.avatar;
+      }
+    } catch (infErr) {
+      console.warn('influencers lookup notice:', infErr.message);
+    }
+
+    // 2. Check if channel is registered in registered_channels table
     try {
       const { data: regRows } = await supabase
         .from('registered_channels')
@@ -354,8 +380,11 @@ const sendInquiry = async (req, res) => {
         .limit(1);
 
       if (regRows && regRows.length > 0) {
-        targetInfluencerUserId = regRows[0].user_id;
+        if (!targetInfluencerUserId || targetInfluencerUserId === rawTargetId) {
+          targetInfluencerUserId = regRows[0].user_id;
+        }
         targetChannelId = regRows[0].youtube_channel_id;
+        resolvedAvatar = resolvedAvatar || regRows[0].thumbnail_url;
       }
     } catch (_) {}
 
@@ -368,9 +397,9 @@ const sendInquiry = async (req, res) => {
       campaign_name: campaignName || 'Sponsorship Campaign Proposal',
       company_name: companyName || 'Brand Partner',
       brand_email: brandEmail || null,
-      influencer_name: influencerName || null,
-      influencer_handle: influencerHandle || null,
-      influencer_avatar: influencerAvatar || null,
+      influencer_name: resolvedName,
+      influencer_handle: resolvedHandle,
+      influencer_avatar: resolvedAvatar,
       youtube_channel_id: targetChannelId || rawTargetId,
       deliverables: Array.isArray(deliverables) ? deliverables.join(', ') : (deliverables || 'Dedicated Video'),
       message: message || '',
@@ -417,29 +446,48 @@ const getInquiries = async (req, res) => {
     if (influencerId && influencerId !== 'undefined' && influencerId !== 'null') {
       const targetId = String(influencerId);
 
-      // Look up any registered channel ID for this influencer
-      let channelId = null;
+      // Collect all identifiers that could belong to this creator
+      const matchConditions = [`influencer_id.eq.${targetId}`];
+
+      try {
+        const { data: infRows } = await supabase
+          .from('influencers')
+          .select('id, user_id, youtube_handle, creator_name')
+          .or(`user_id.eq.${targetId.includes('-') ? targetId : '00000000-0000-0000-0000-000000000000'},id.eq.${!isNaN(Number(targetId)) ? Number(targetId) : -1}`)
+          .limit(1);
+
+        if (infRows && infRows.length > 0) {
+          const inf = infRows[0];
+          if (inf.id) matchConditions.push(`influencer_id.eq.${inf.id}`);
+          if (inf.user_id) matchConditions.push(`influencer_id.eq.${inf.user_id}`);
+          if (inf.youtube_handle) matchConditions.push(`influencer_handle.ilike.${inf.youtube_handle}`);
+        }
+      } catch (_) {}
+
       try {
         const { data: regRows } = await supabase
           .from('registered_channels')
           .select('youtube_channel_id')
-          .eq('user_id', targetId)
-          .limit(1);
+          .eq('user_id', targetId.includes('-') ? targetId : '00000000-0000-0000-0000-000000000000')
+          .limit(5);
 
         if (regRows && regRows.length > 0) {
-          channelId = regRows[0].youtube_channel_id;
+          regRows.forEach((r) => {
+            if (r.youtube_channel_id) {
+              matchConditions.push(`youtube_channel_id.eq.${r.youtube_channel_id}`);
+            }
+          });
         }
       } catch (_) {}
 
-      let query = supabase.from('inquiries').select('*');
-      if (channelId) {
-        query = query.or(`influencer_id.eq.${targetId},youtube_channel_id.eq.${channelId}`);
-      } else {
-        query = query.eq('influencer_id', targetId);
-      }
+      const { data: inquiries, error } = await supabase
+        .from('inquiries')
+        .select('*')
+        .or(matchConditions.join(','))
+        .order('created_at', { ascending: false });
 
-      const { data: inquiries, error } = await query.order('created_at', { ascending: false });
       if (error) {
+        console.warn('getInquiries query notice:', error.message);
         return res.status(200).json({ success: true, inquiries: [] });
       }
       return res.status(200).json({ success: true, inquiries: inquiries || [] });

@@ -295,7 +295,9 @@ const calculateRecommendationMatches = async (req, res) => {
       }
 
       const aiData = await response.json();
-      rawAiRecommendations = aiData.recommendations || [];
+      rawAiRecommendations = (aiData.recommendations || []).filter(
+        (r) => Number(r.subscriber_count ?? 0) >= 5000
+      );
     } catch (aiError) {
       console.warn('AI Engine direct call notice, querying ml_channels fallback:', aiError.message);
 
@@ -303,6 +305,7 @@ const calculateRecommendationMatches = async (req, res) => {
       let query = supabase
         .from('ml_channels')
         .select('*')
+        .gte('subscriber_count', 5000)
         .ilike('category', category);
 
       if (target_country) {
@@ -312,24 +315,27 @@ const calculateRecommendationMatches = async (req, res) => {
 
       const { data: fallbackChannels } = await query.limit(top_n * 3);
       if (fallbackChannels && fallbackChannels.length > 0) {
-        rawAiRecommendations = fallbackChannels.slice(0, top_n).map((ch, idx) => ({
-          rank: idx + 1,
-          channel_id: ch.channel_id,
-          channel_name: ch.title || ch.channel_id,
-          channel_url: ch.channel_url,
-          thumbnail_url: ch.thumbnail_url,
-          category: ch.category,
-          country: ch.country,
-          tier: ch.tier || 'micro',
-          subscriber_count: ch.subscriber_count,
-          view_count: ch.view_count,
-          engagement_rate: Number(ch.avg_engagement_rate || 0.045),
-          semantic_similarity: 0.72,
-          engagement_score: 0.75,
-          recommendation_score: Number((0.72 * 0.7 + 0.75 * 0.3).toFixed(4)),
-          budget_fit: 'not_verified - creator fee data unavailable',
-          reasons: ['Strong campaign-content match']
-        }));
+        rawAiRecommendations = fallbackChannels
+          .filter((ch) => Number(ch.subscriber_count ?? 0) >= 5000)
+          .slice(0, top_n)
+          .map((ch, idx) => ({
+            rank: idx + 1,
+            channel_id: ch.channel_id,
+            channel_name: ch.title || ch.channel_id,
+            channel_url: ch.channel_url,
+            thumbnail_url: ch.thumbnail_url,
+            category: ch.category,
+            country: ch.country,
+            tier: ch.tier || 'micro',
+            subscriber_count: ch.subscriber_count,
+            view_count: ch.view_count,
+            engagement_rate: Number(ch.avg_engagement_rate || 0.045),
+            semantic_similarity: 0.72,
+            engagement_score: 0.75,
+            recommendation_score: Number((0.72 * 0.7 + 0.75 * 0.3).toFixed(4)),
+            budget_fit: 'not_verified - creator fee data unavailable',
+            reasons: ['Strong campaign-content match']
+          }));
       }
     }
 
@@ -368,9 +374,14 @@ const calculateRecommendationMatches = async (req, res) => {
       }
     }
 
-    const recommendations = rawAiRecommendations.map((aiRec) =>
-      formatChannelRecommendation(aiRec, metaByChannelId[aiRec.channel_id])
-    );
+    const recommendations = rawAiRecommendations
+      .filter((aiRec) => {
+        const subs = Number(aiRec.subscriber_count ?? metaByChannelId[aiRec.channel_id]?.subscriber_count ?? 0);
+        return subs >= 5000;
+      })
+      .map((aiRec) =>
+        formatChannelRecommendation(aiRec, metaByChannelId[aiRec.channel_id])
+      );
 
     // Store every recommendation run in history unless explicitly skipped
     let historyId = null;

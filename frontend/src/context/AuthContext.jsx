@@ -17,15 +17,41 @@ export const AuthProvider = ({ children }) => {
   const [role, setRole] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // Sync session and role
+  // Sync session and role with 24-hour persistence
   const processSession = async (currentSession) => {
+    const SESSION_DURATION_MS = 24 * 60 * 60 * 1000;
+
     if (!currentSession?.user) {
+      // Check if user has an active session persisted in localStorage within the 24-hour window
+      const storedUserStr = localStorage.getItem('influenceai_user');
+      const sessionExpiresStr = localStorage.getItem('influenceai_session_expires');
+      const now = Date.now();
+
+      if (storedUserStr && (!sessionExpiresStr || now < Number(sessionExpiresStr))) {
+        try {
+          const parsedUser = JSON.parse(storedUserStr);
+          const legacyRole = localStorage.getItem('influenceai_role') || parsedUser.role;
+          const userRole = normalizeRole(parsedUser.canonicalRole || legacyRole);
+
+          setUser(parsedUser);
+          setRole(userRole);
+          setSession({ user: parsedUser, access_token: localStorage.getItem('influenceai_token') || '' });
+          // Ensure session expiration is set to 24 hours from now
+          if (!sessionExpiresStr) {
+            localStorage.setItem('influenceai_session_expires', String(now + SESSION_DURATION_MS));
+          }
+          setLoading(false);
+          return;
+        } catch (_) {}
+      }
+
       setSession(null);
       setUser(null);
       setRole(null);
       localStorage.removeItem('influenceai_user');
       localStorage.removeItem('influenceai_role');
       localStorage.removeItem('influenceai_token');
+      localStorage.removeItem('influenceai_session_expires');
       setLoading(false);
       return;
     }
@@ -34,6 +60,7 @@ export const AuthProvider = ({ children }) => {
     const currentUser = currentSession.user;
     setUser(currentUser);
     localStorage.setItem('influenceai_token', currentSession.access_token);
+    localStorage.setItem('influenceai_session_expires', String(Date.now() + SESSION_DURATION_MS));
 
     // Determine role from user_metadata first
     let userRole = normalizeRole(currentUser.user_metadata?.role);
@@ -166,14 +193,16 @@ export const AuthProvider = ({ children }) => {
   };
 
   const signOut = async () => {
-    const { error } = await supabase.auth.signOut();
+    try {
+      await supabase.auth.signOut();
+    } catch (_) {}
     localStorage.removeItem('influenceai_user');
     localStorage.removeItem('influenceai_role');
     localStorage.removeItem('influenceai_token');
+    localStorage.removeItem('influenceai_session_expires');
     setSession(null);
     setUser(null);
     setRole(null);
-    if (error) throw error;
   };
 
   return (
